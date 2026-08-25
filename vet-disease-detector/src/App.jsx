@@ -1,6 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Navbar from './components/Navbar.jsx';
 import Footer from './components/Footer.jsx';
+import {
+  analyzeHealth,
+  clearStoredAuth,
+  connectHuggingFace,
+  getAnimals,
+  getHealthHistory,
+  getStoredHuggingFaceToken,
+  getStoredUser
+} from './api/client.js';
 
 // Pages
 import Home from './pages/Home.jsx';
@@ -27,10 +36,17 @@ export default function App({ initialData }) {
   } = initialData || {};
 
   const [activePage, setActivePage] = useState('home');
-  const [user, setUser] = useState({ name: 'Dr. Sarah Jenkins', email: 'sarah.j@vetscan.org', role: 'veterinarian' });
+  const [user, setUser] = useState(() => getStoredUser());
+  const [hfToken, setHfToken] = useState(() => getStoredHuggingFaceToken());
+  const [showHfConnect, setShowHfConnect] = useState(false);
+  const [hfConnectError, setHfConnectError] = useState('');
+  const [hfConnecting, setHfConnecting] = useState(false);
   const [selectedSpecies, setSelectedSpecies] = useState('dog');
   const [activeResult, setActiveResult] = useState(null);
   const [selectedDiseaseModal, setSelectedDiseaseModal] = useState(null);
+  const [animals, setAnimals] = useState([]);
+  const [apiError, setApiError] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Stored prediction history
   const [historyList, setHistoryList] = useState([
@@ -60,123 +76,102 @@ export default function App({ initialData }) {
     }
   ]);
 
-  // Differential Diagnostic Evaluation Algorithm
-  const handleRunPrediction = ({ patient, symptoms, scannerOverride }) => {
-    const currentSpecies = patient.species || selectedSpecies;
+  useEffect(() => {
+    refreshBackendState();
+  }, []);
 
-    if (scannerOverride) {
-      const scanResultObj = {
-        patient,
-        symptoms,
-        scannerOverride,
-        evaluatedAt: new Date().toLocaleTimeString(),
-        triageStatus: {
-          level: scannerOverride.severity.includes('URGENT') || scannerOverride.severity.includes('CRITICAL') ? 'AMBER' : 'GREEN',
-          title: scannerOverride.severity,
-          message: scannerOverride.actionPlan,
-          hasRedFlags: false,
-          redFlagList: []
-        },
-        topMatches: [
-          {
-            id: scannerOverride.id,
-            name: scannerOverride.detectedDisease,
-            confidence: scannerOverride.confidence,
-            urgencyLevel: scannerOverride.severity.includes('CRITICAL') ? 'CRITICAL' : 'URGENT',
-            pathogenType: 'Visual Lesion Scan Match',
-            incubationPeriod: 'N/A (Cutaneous Presentation)',
-            description: scannerOverride.lesionType,
-            clinicalDiagnostics: [scannerOverride.recommendedTest],
-            matchedSymptoms: symptoms,
-            zoonotic: scannerOverride.severity.includes('ZOONOTIC')
-          },
-          ...(scannerOverride.secondaryMatches || []).map((m, i) => ({
-            id: `sec_${i}`,
-            name: m.name,
-            confidence: m.conf,
-            urgencyLevel: 'MODERATE',
-            pathogenType: 'Secondary Differential',
-            incubationPeriod: 'Varies',
-            description: 'Secondary morphological match based on dermatological boundary characteristics.',
-            clinicalDiagnostics: ['Skin Scraping / Cytology'],
-            matchedSymptoms: []
-          }))
-        ]
-      };
+  useEffect(() => {
+    if (user && !hfToken && !user.hf_connected) {
+      setShowHfConnect(true);
+    }
+  }, [user, hfToken]);
 
-      setActiveResult(scanResultObj);
-      saveToHistory(scanResultObj);
+  const refreshBackendState = async () => {
+    try {
+      const [animalRows, screeningRows] = await Promise.all([
+        getAnimals(),
+        getHealthHistory()
+      ]);
+      setAnimals(animalRows);
+      if (screeningRows.length > 0) {
+        setHistoryList(screeningRows.map(screeningToHistory));
+      }
+      setApiError('');
+    } catch (error) {
+      setApiError(error.message || 'Backend unavailable. Start the Go backend for live demo mode.');
+    }
+  };
+
+  const handleRunPrediction = async ({ patient, symptoms, symptomDetails, mediaId }) => {
+    if (!getStoredHuggingFaceToken()) {
+      setApiError('Connect your Hugging Face account before running live inference.');
+      setShowHfConnect(true);
       return;
     }
-
-    // Standard symptom matching algorithm
-    const relevant = diseasesDatabase.filter(d => d.species.includes(currentSpecies) || d.species.includes('all'));
-
-    const matches = relevant.map(disease => {
-      const totalKey = disease.keySymptoms.length;
-      const matched = disease.keySymptoms.filter(s => symptoms.includes(s));
-      const missing = disease.keySymptoms.filter(s => !symptoms.includes(s));
-      const matchCount = matched.length;
-      const matchRatio = totalKey > 0 ? matchCount / totalKey : 0;
-
-      let confidence = 0;
-      if (symptoms.length > 0 && matchCount > 0) {
-        confidence = Math.min(98, Math.round(matchRatio * 70 + Math.min(matchCount, 4) * 7));
-      }
-
-      return {
-        ...disease,
-        matchCount,
-        totalKey,
-        matchedSymptoms: matched,
-        missingSymptoms: missing,
-        confidence
-      };
-    });
-
-    matches.sort((a, b) => b.confidence - a.confidence);
-    const topMatches = matches.filter(m => m.confidence > 15);
-
-    // Emergency Triage
-    const criticalSymptoms = ['collapse', 'bloody_vomit', 'bloody_diarrhea', 'bloat_distension', 'dyspnea', 'cyanosis', 'anuria', 'seizures', 'paralysis'];
-    const activeCritical = symptoms.filter(s => criticalSymptoms.includes(s));
-
-    let triageStatus = {
-      level: 'GREEN',
-      title: 'Routine Care / Mild Urgency',
-      message: 'No immediate red-flag indicators detected. Continue monitoring vitals and schedule a veterinary visit if symptoms persist.',
-      hasRedFlags: false,
-      redFlagList: []
-    };
-
-    if (activeCritical.length > 0 || (topMatches[0] && topMatches[0].urgencyLevel === 'CRITICAL' && topMatches[0].confidence >= 50)) {
-      triageStatus = {
-        level: 'RED',
-        title: 'CRITICAL EMERGENCY - IMMEDIATE VET CARE',
-        message: 'Potentially life-threatening conditions or acute clinical distress detected. Do not delay. Transport patient immediately to an emergency veterinary hospital.',
-        hasRedFlags: true,
-        redFlagList: activeCritical.map(c => c.replace(/_/g, ' ').toUpperCase())
-      };
-    } else if (symptoms.length >= 3 || (topMatches[0] && topMatches[0].confidence >= 40)) {
-      triageStatus = {
-        level: 'AMBER',
-        title: 'URGENT - VET VISIT WITHIN 24 HOURS',
-        message: 'Active symptoms indicate an acute infectious, inflammatory, or parasitic disease. Schedule a veterinary examination today.',
-        hasRedFlags: false,
-        redFlagList: []
-      };
+    setIsAnalyzing(true);
+    setApiError('');
+    try {
+      const screening = await analyzeHealth({
+        animal_id: patient.id || 0,
+        animal: {
+          name: patient.name,
+          species: patient.species || selectedSpecies,
+          breed: patient.breed,
+          age: patient.age,
+          sex: patient.sex,
+          weight: patient.weight,
+          notes: patient.notes
+        },
+        media_id: mediaId || 0,
+        symptoms: symptomDetails || {
+          symptoms,
+          duration: patient.duration,
+          recent_vaccination: patient.vaccineStatus === 'up_to_date'
+        }
+      });
+      const result = screeningToResult(screening, patient);
+      setActiveResult(result);
+      setHistoryList([screeningToHistory(screening, patient), ...historyList.filter(h => h.id !== `screening_${screening.id}`)]);
+      refreshBackendState();
+      setActivePage('result');
+    } catch (error) {
+      setApiError(error.message || 'Health analysis failed.');
+      throw error;
+    } finally {
+      setIsAnalyzing(false);
     }
+  };
 
-    const newResult = {
-      patient,
-      symptoms,
-      topMatches: topMatches.length > 0 ? topMatches : relevant.slice(0, 3).map(r => ({ ...r, confidence: 25, matchedSymptoms: [] })),
-      triageStatus,
-      evaluatedAt: new Date().toLocaleTimeString()
-    };
+  const handleAuthSuccess = (auth) => {
+    setUser(auth.user);
+    setHfToken(getStoredHuggingFaceToken());
+    if (!getStoredHuggingFaceToken() && !auth.user?.hf_connected) {
+      setShowHfConnect(true);
+    }
+    setActivePage('dashboard');
+  };
 
-    setActiveResult(newResult);
-    saveToHistory(newResult);
+  const handleLogout = () => {
+    clearStoredAuth();
+    setUser(null);
+    setHfToken('');
+    setShowHfConnect(false);
+    setActivePage('login');
+  };
+
+  const handleConnectHuggingFace = async (e) => {
+    e.preventDefault();
+    setHfConnecting(true);
+    setHfConnectError('');
+    try {
+      const result = await connectHuggingFace(hfToken);
+      if (result.user) setUser(result.user);
+      setShowHfConnect(false);
+    } catch (error) {
+      setHfConnectError(error.message || 'Could not connect Hugging Face.');
+    } finally {
+      setHfConnecting(false);
+    }
   };
 
   const saveToHistory = (resultObj) => {
@@ -239,6 +234,7 @@ export default function App({ initialData }) {
         setActivePage={setActivePage}
         user={user}
         setUser={setUser}
+        onLogout={handleLogout}
       />
 
       {/* Main Page Routing */}
@@ -254,14 +250,14 @@ export default function App({ initialData }) {
         {activePage === 'login' && (
           <Login
             setActivePage={setActivePage}
-            setUser={setUser}
+            onAuthSuccess={handleAuthSuccess}
           />
         )}
 
         {activePage === 'signup' && (
           <Signup
             setActivePage={setActivePage}
-            setUser={setUser}
+            onAuthSuccess={handleAuthSuccess}
           />
         )}
 
@@ -271,6 +267,8 @@ export default function App({ initialData }) {
             user={user}
             historyList={historyList}
             onSelectHistoryItem={handleSelectHistoryItem}
+            animals={animals}
+            onRefresh={refreshBackendState}
           />
         )}
 
@@ -293,6 +291,9 @@ export default function App({ initialData }) {
             setSelectedSpecies={setSelectedSpecies}
             onRunPrediction={handleRunPrediction}
             setActivePage={setActivePage}
+            animals={animals}
+            apiError={apiError}
+            isAnalyzing={isAnalyzing}
           />
         )}
 
@@ -411,8 +412,104 @@ export default function App({ initialData }) {
         </div>
       )}
 
+      {showHfConnect && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-black text-slate-900">Connect Hugging Face</h3>
+              <p className="text-xs text-slate-500">
+                Enter a Hugging Face access token with Inference Providers permission. It stays in this browser and is sent with inference requests.
+              </p>
+            </div>
+            <form onSubmit={handleConnectHuggingFace} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Access token</label>
+                <input
+                  type="password"
+                  value={hfToken}
+                  onChange={(e) => setHfToken(e.target.value)}
+                  placeholder="hf_..."
+                  required
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+              {hfConnectError && <p className="text-red-700 bg-red-50 border border-red-100 rounded-xl p-3 font-semibold">{hfConnectError}</p>}
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setShowHfConnect(false)} className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">
+                  Later
+                </button>
+                <button type="submit" disabled={hfConnecting} className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold disabled:opacity-60">
+                  {hfConnecting ? 'Connecting...' : 'Connect'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
       <Footer setActivePage={setActivePage} />
     </div>
   );
+}
+
+function urgencyToTriage(urgency) {
+  if (urgency === 'emergency') return { level: 'RED', title: 'Emergency Veterinary Attention' };
+  if (urgency === 'high') return { level: 'AMBER', title: 'High Concern - Prompt Vet Care' };
+  if (urgency === 'moderate') return { level: 'AMBER', title: 'Moderate Health Concern' };
+  return { level: 'GREEN', title: 'Low Concern / Monitor' };
+}
+
+function screeningToResult(screening, fallbackPatient = {}) {
+  const assessment = screening.assessment || {};
+  const triageBase = urgencyToTriage(assessment.urgency || screening.urgency);
+  return {
+    backendScreening: screening,
+    patient: {
+      ...fallbackPatient,
+      id: screening.animal_id,
+      species: fallbackPatient.species || screening.visual_analysis?.animal || 'animal'
+    },
+    symptoms: screening.symptoms?.symptoms || [],
+    symptomDetails: screening.symptoms,
+    visualAnalysis: screening.visual_analysis,
+    assessment,
+    mediaUrl: screening.media_url,
+    evaluatedAt: new Date(screening.created_at).toLocaleString(),
+    triageStatus: {
+      ...triageBase,
+      message: assessment.summary,
+      hasRedFlags: assessment.urgency === 'emergency',
+      redFlagList: assessment.urgency === 'emergency' ? ['Emergency urgency'] : []
+    },
+    topMatches: (assessment.possible_conditions || []).map((condition, idx) => ({
+      id: `${screening.id}_${idx}`,
+      name: condition.name,
+      confidence: condition.likelihood === 'high' ? 86 : condition.likelihood === 'moderate' ? 68 : 42,
+      urgencyLevel: (assessment.urgency || 'moderate').toUpperCase(),
+      pathogenType: 'AI-assisted possible condition',
+      incubationPeriod: 'Varies',
+      description: condition.reason,
+      clinicalDiagnostics: assessment.recommended_next_steps || [],
+      matchedSymptoms: screening.symptoms?.symptoms || []
+    }))
+  };
+}
+
+function screeningToHistory(screening, patient = {}) {
+  const first = screening.assessment?.possible_conditions?.[0];
+  const triage = urgencyToTriage(screening.urgency);
+  return {
+    id: `screening_${screening.id}`,
+    date: new Date(screening.created_at).toLocaleString(),
+    patientName: patient.name || `Animal #${screening.animal_id}`,
+    species: patient.species || screening.visual_analysis?.animal || 'Animal',
+    breed: patient.breed || '',
+    topDisease: first?.name || 'AI Health Screening',
+    confidence: first?.likelihood === 'high' ? 86 : first?.likelihood === 'moderate' ? 68 : 42,
+    urgency: (screening.urgency || 'moderate').toUpperCase(),
+    triageLevel: triage.level,
+    symptoms: screening.symptoms?.symptoms || [],
+    fullResult: screeningToResult(screening, patient)
+  };
 }

@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import AnimalCard from '../components/AnimalCard.jsx';
-import PredictionCard from '../components/PredictionCard.jsx';
+import React, { useEffect, useRef, useState } from 'react';
+import { uploadHealthMedia } from '../api/client.js';
 
 export default function Prediction({
   speciesList,
@@ -10,7 +9,10 @@ export default function Prediction({
   selectedSpecies,
   setSelectedSpecies,
   onRunPrediction,
-  setActivePage
+  setActivePage,
+  animals = [],
+  apiError = '',
+  isAnalyzing = false
 }) {
   const [activeMode, setActiveMode] = useState('symptoms'); // 'symptoms' or 'scanner'
   const [patient, setPatient] = useState({
@@ -23,11 +25,28 @@ export default function Prediction({
     duration: '1-3 Days'
   });
   const [selectedSymptoms, setSelectedSymptoms] = useState(new Set(['fever', 'lethargy', 'vomiting']));
+  const [symptomDetails, setSymptomDetails] = useState({
+    duration: '1-3 Days',
+    getting_worse: false,
+    recent_injury: false,
+    recent_vaccination: true,
+    contact_sick_animals: false,
+    other: ''
+  });
 
   // Scanner state
   const [scanImage, setScanImage] = useState(null);
+  const [mediaId, setMediaId] = useState(0);
+  const [mediaFileName, setMediaFileName] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [scannerResult, setScannerResult] = useState(null);
+  const [uploadError, setUploadError] = useState('');
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+
+  useEffect(() => () => stopCamera(), []);
 
   const toggleSymptom = (symId) => {
     const next = new Set(selectedSymptoms);
@@ -36,17 +55,18 @@ export default function Prediction({
     setSelectedSymptoms(next);
   };
 
-  const handlePredictSubmit = (e) => {
+  const handlePredictSubmit = async (e) => {
     e.preventDefault();
     if (selectedSymptoms.size === 0) {
       alert('Please select at least 1 observed symptom to run the differential AI diagnostic algorithm.');
       return;
     }
-    onRunPrediction({
+    await onRunPrediction({
       patient: { ...patient, species: selectedSpecies },
-      symptoms: Array.from(selectedSymptoms)
+      symptoms: Array.from(selectedSymptoms),
+      symptomDetails: { ...symptomDetails, duration: patient.duration, symptoms: Array.from(selectedSymptoms) },
+      mediaId
     });
-    setActivePage('result');
   };
 
   const handlePresetScan = (preset) => {
@@ -60,36 +80,90 @@ export default function Prediction({
     }, 1600);
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    await uploadAndPreview(file);
+  };
+
+  const uploadAndPreview = async (file) => {
+    setUploadError('');
     const reader = new FileReader();
     reader.onload = (event) => {
-      const customPreset = {
-        id: 'custom_upload',
-        title: 'Custom Uploaded Lesion',
-        species: patient.species,
-        area: 'Dermal / Cutaneous Region',
-        detectedDisease: 'Superficial Pyoderma / Focal Erythematous Dermatitis',
-        confidence: 89.2,
-        secondaryMatches: [
-          { name: 'Allergic Contact Dermatitis', conf: 72.0 },
-          { name: 'Demodicosis', conf: 61.4 }
-        ],
-        lesionType: 'Localized epidermal erythema, papular eruption with secondary excoriation',
-        severity: 'MODERATE - SCHEDULE VET EXAM',
-        recommendedTest: 'Impression smear skin cytology, Fungal DTM culture',
-        actionPlan: 'Prevent patient from licking/scratching area (cone collar recommended). Cleanse with antiseptic 2% Chlorhexidine solution and seek veterinary confirmation.',
-        thumbnail: event.target.result
-      };
       setScanImage(event.target.result);
       setIsScanning(true);
-      setTimeout(() => {
-        setIsScanning(false);
-        setScannerResult(customPreset);
-      }, 1600);
     };
     reader.readAsDataURL(file);
+    try {
+      const media = await uploadHealthMedia(file);
+      setMediaId(media.id);
+      setMediaFileName(file.name);
+      setScannerResult({
+        id: `media_${media.id}`,
+        detectedDisease: 'Ready for AI health screening',
+        confidence: 0,
+        lesionType: 'Media uploaded to backend. Run full assessment to combine visual analysis, symptoms, and animal history.',
+        severity: 'PENDING FULL ASSESSMENT',
+        recommendedTest: 'Veterinary exam if symptoms persist or worsen.',
+        actionPlan: 'Continue to the full AI health assessment.',
+        species: patient.species
+      });
+    } catch (error) {
+      setUploadError(error.message || 'Upload failed.');
+      setScanImage(null);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const startCamera = async () => {
+    setCameraError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      streamRef.current = stream;
+      setCameraOpen(true);
+      setTimeout(() => {
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      }, 0);
+    } catch (error) {
+      setCameraError('Camera permission denied. You can upload an existing image instead.');
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setCameraOpen(false);
+  };
+
+  const captureImage = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], `camera-capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      stopCamera();
+      await uploadAndPreview(file);
+    }, 'image/jpeg', 0.9);
+  };
+
+  const runVisualAssessment = async () => {
+    if (!mediaId && !scanImage) {
+      setUploadError('Upload or capture an image/video before running visual analysis.');
+      return;
+    }
+    await onRunPrediction({
+      patient: { ...patient, species: selectedSpecies },
+      symptoms: Array.from(selectedSymptoms),
+      symptomDetails: { ...symptomDetails, duration: patient.duration, symptoms: Array.from(selectedSymptoms) },
+      mediaId
+    });
   };
 
   return (
@@ -165,6 +239,25 @@ export default function Prediction({
               Step 2: Patient Information
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+              {animals.length > 0 && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Saved Animal</label>
+                  <select
+                    value={patient.id || ''}
+                    onChange={(e) => {
+                      const animal = animals.find(a => String(a.id) === e.target.value);
+                      if (animal) {
+                        setPatient({ ...patient, ...animal, duration: patient.duration, vaccineStatus: patient.vaccineStatus });
+                        setSelectedSpecies(animal.species);
+                      }
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">New animal</option>
+                    {animals.map(animal => <option key={animal.id} value={animal.id}>{animal.name} ({animal.species})</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Name / Tag</label>
                 <input
@@ -229,6 +322,19 @@ export default function Prediction({
                   <option>Chronic (&gt; 1 Week)</option>
                 </select>
               </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs pt-3 border-t border-slate-100">
+              <label className="flex items-center gap-2 font-semibold text-slate-700"><input type="checkbox" checked={symptomDetails.getting_worse} onChange={(e) => setSymptomDetails({ ...symptomDetails, getting_worse: e.target.checked })} /> Getting worse</label>
+              <label className="flex items-center gap-2 font-semibold text-slate-700"><input type="checkbox" checked={symptomDetails.recent_injury} onChange={(e) => setSymptomDetails({ ...symptomDetails, recent_injury: e.target.checked })} /> Recent injury</label>
+              <label className="flex items-center gap-2 font-semibold text-slate-700"><input type="checkbox" checked={symptomDetails.recent_vaccination} onChange={(e) => setSymptomDetails({ ...symptomDetails, recent_vaccination: e.target.checked })} /> Recent vaccination</label>
+              <label className="flex items-center gap-2 font-semibold text-slate-700"><input type="checkbox" checked={symptomDetails.contact_sick_animals} onChange={(e) => setSymptomDetails({ ...symptomDetails, contact_sick_animals: e.target.checked })} /> Contact with sick animals</label>
+              <input
+                type="text"
+                placeholder="Other symptoms or notes"
+                value={symptomDetails.other}
+                onChange={(e) => setSymptomDetails({ ...symptomDetails, other: e.target.value })}
+                className="sm:col-span-2 lg:col-span-4 w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
             </div>
           </div>
 
@@ -295,11 +401,13 @@ export default function Prediction({
 
           {/* Submit Prediction Button */}
           <div className="pt-4 flex justify-end">
+            {(apiError || uploadError) && <p className="mr-auto text-xs font-semibold text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{apiError || uploadError}</p>}
             <button
               type="submit"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm px-8 py-4 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2"
+              disabled={isAnalyzing}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm px-8 py-4 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 disabled:opacity-60"
             >
-              <span>🔬 Analyze Symptoms & Calculate Differentials</span>
+              <span>{isAnalyzing ? 'Analyzing...' : '🔬 Analyze Symptoms & Calculate Differentials'}</span>
               <span>→</span>
             </button>
           </div>
@@ -341,18 +449,31 @@ export default function Prediction({
             <div className="lg:col-span-6 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">Image Analysis Viewport</h3>
-                <label className="cursor-pointer text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl transition-colors">
-                  <span>📤 Upload Custom Photo</span>
-                  <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-                </label>
+                <div className="flex flex-wrap gap-2 justify-end">
+                  <label className="cursor-pointer text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl transition-colors">
+                    <span>📤 Upload Image/Video</span>
+                    <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4" onChange={handleFileUpload} className="hidden" />
+                  </label>
+                  <button type="button" onClick={startCamera} className="text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-xl transition-colors">
+                    📷 Capture Image
+                  </button>
+                </div>
               </div>
 
+              {(uploadError || cameraError || apiError) && (
+                <div className="text-xs font-semibold text-red-700 bg-red-50 border border-red-100 rounded-xl p-3">
+                  {uploadError || cameraError || apiError}
+                </div>
+              )}
+
               <div className="scan-container relative w-full h-80 bg-slate-900 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-800">
-                {!scanImage ? (
+                {cameraOpen ? (
+                  <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain bg-black" />
+                ) : !scanImage ? (
                   <div className="text-center p-6">
                     <div className="text-5xl mb-2 opacity-50">📷</div>
                     <p className="text-sm font-bold text-slate-300">No Image Loaded</p>
-                    <p className="text-xs text-slate-500 mt-1 max-w-xs">Select a preset or upload an image of the lesion/parasite to scan.</p>
+                    <p className="text-xs text-slate-500 mt-1 max-w-xs">Select a preset, upload media, or capture a camera image to scan.</p>
                   </div>
                 ) : (
                   <>
@@ -363,9 +484,16 @@ export default function Prediction({
                 )}
               </div>
 
+              {cameraOpen && (
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={stopCamera} className="text-xs font-bold bg-slate-100 text-slate-700 px-4 py-2 rounded-xl">Cancel</button>
+                  <button type="button" onClick={captureImage} className="text-xs font-bold bg-emerald-600 text-white px-4 py-2 rounded-xl">Capture & Use</button>
+                </div>
+              )}
+
               <div className="flex justify-between text-[11px] text-slate-400">
-                <span>Model: VetVisionNet v4 (Segmentation CNN)</span>
-                <span>Ready for Inference</span>
+                <span>Model: Qwen/Qwen2.5-VL-7B-Instruct via Go backend</span>
+                <span>{mediaFileName || 'Ready for inference'}</span>
               </div>
             </div>
 
@@ -422,17 +550,11 @@ export default function Prediction({
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        onRunPrediction({
-                          patient: { ...patient, species: scannerResult.species.toLowerCase().includes('dog') ? 'dog' : 'cat' },
-                          symptoms: ['skin_nodules', 'erythema_hotspots', 'severe_itching'],
-                          scannerOverride: scannerResult
-                        });
-                        setActivePage('result');
-                      }}
-                      className="text-xs font-bold text-emerald-600 hover:underline"
+                      onClick={runVisualAssessment}
+                      disabled={isAnalyzing}
+                      className="text-xs font-bold text-emerald-600 hover:underline disabled:opacity-60"
                     >
-                      Export to Full Medical Report 📄
+                      {isAnalyzing ? 'Running assessment...' : 'Run Full AI Health Assessment →'}
                     </button>
                   </div>
                 </div>

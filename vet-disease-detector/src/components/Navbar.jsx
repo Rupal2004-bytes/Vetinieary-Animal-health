@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Navbar({ activePage, setActivePage, user, setUser }) {
+export default function Navbar({ activePage, setActivePage, user, setUser, onLogout }) {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   const navItems = [
@@ -69,9 +69,12 @@ export default function Navbar({ activePage, setActivePage, user, setUser }) {
 
             {user ? (
               <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
-                <span className="text-xs font-semibold text-slate-700">Dr. {user.name}</span>
+                <span className="text-xs font-semibold text-slate-700">{user.name}</span>
                 <button
-                  onClick={() => setUser(null)}
+                  onClick={() => {
+                    if (onLogout) onLogout();
+                    else setUser(null);
+                  }}
                   className="px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-red-600 rounded-md hover:bg-slate-100"
                 >
                   Logout
@@ -146,7 +149,11 @@ export default function Navbar({ activePage, setActivePage, user, setUser }) {
               </>
             ) : (
               <button
-                onClick={() => { setUser(null); setMobileMenuOpen(false); }}
+                onClick={() => {
+                  if (onLogout) onLogout();
+                  else setUser(null);
+                  setMobileMenuOpen(false);
+                }}
                 className="p-2 text-xs font-bold text-center text-red-600 bg-red-50 rounded-lg"
               >
                 Logout

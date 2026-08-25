@@ -1,31 +1,39 @@
 import React, { useState } from 'react';
+import { createAnimal } from '../api/client.js';
 
-export default function Dashboard({ setActivePage, user, historyList, onSelectHistoryItem }) {
-  const [patients, setPatients] = useState([
+export default function Dashboard({ setActivePage, user, historyList, onSelectHistoryItem, animals = [], onRefresh }) {
+  const fallbackPatients = [
     { id: 'p1', name: 'Buddy', species: 'Dog (Canine)', breed: 'Golden Retriever', age: '2 yrs', weight: '28 kg', lastCheck: 'Today', status: 'Under Evaluation', statusColor: 'bg-amber-100 text-amber-800' },
     { id: 'p2', name: 'Luna', species: 'Cat (Feline)', breed: 'Persian Mix', age: '3 yrs', weight: '4.2 kg', lastCheck: 'Yesterday', status: 'Stable', statusColor: 'bg-emerald-100 text-emerald-800' },
     { id: 'p3', name: 'Daisy (Herd #402)', species: 'Cattle (Bovine)', breed: 'Holstein Dairy', age: '4 yrs', weight: '550 kg', lastCheck: '3 days ago', status: 'Vaccinated', statusColor: 'bg-blue-100 text-blue-800' },
-  ]);
+  ];
+  const patients = animals.length > 0 ? animals.map(a => ({
+    ...a,
+    species: a.species,
+    lastCheck: 'Saved profile',
+    status: 'Registered',
+    statusColor: 'bg-emerald-100 text-emerald-800'
+  })) : fallbackPatients;
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newPatient, setNewPatient] = useState({ name: '', species: 'Dog (Canine)', breed: '', age: '', weight: '' });
+  const [newPatient, setNewPatient] = useState({ name: '', species: 'dog', breed: '', age: '', weight: '', sex: '', notes: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleAddPatient = (e) => {
+  const handleAddPatient = async (e) => {
     e.preventDefault();
-    const newEntry = {
-      id: `p_${Date.now()}`,
-      name: newPatient.name || 'New Patient',
-      species: newPatient.species,
-      breed: newPatient.breed || 'Mixed',
-      age: newPatient.age || '1 yr',
-      weight: newPatient.weight || '10 kg',
-      lastCheck: 'Just now',
-      status: 'Registered',
-      statusColor: 'bg-emerald-100 text-emerald-800'
-    };
-    setPatients([newEntry, ...patients]);
-    setShowAddModal(false);
-    setNewPatient({ name: '', species: 'Dog (Canine)', breed: '', age: '', weight: '' });
+    setSaving(true);
+    setError('');
+    try {
+      await createAnimal(newPatient);
+      await onRefresh?.();
+      setShowAddModal(false);
+      setNewPatient({ name: '', species: 'dog', breed: '', age: '', weight: '', sex: '', notes: '' });
+    } catch (err) {
+      setError(err.message || 'Could not save animal.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -241,14 +249,13 @@ export default function Dashboard({ setActivePage, user, historyList, onSelectHi
                   onChange={(e) => setNewPatient({ ...newPatient, species: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="Dog (Canine)">Dog (Canine)</option>
-                  <option value="Cat (Feline)">Cat (Feline)</option>
-                  <option value="Cattle (Bovine)">Cattle (Bovine)</option>
-                  <option value="Horse (Equine)">Horse (Equine)</option>
-                  <option value="Goat / Sheep">Goat / Sheep</option>
-                  <option value="Poultry / Bird">Poultry / Bird</option>
-                  <option value="Pig (Swine)">Pig (Swine)</option>
-                  <option value="Rabbit / Exotic">Rabbit / Exotic</option>
+                  <option value="dog">Dog (Canine)</option>
+                  <option value="cat">Cat (Feline)</option>
+                  <option value="cattle">Cattle (Bovine)</option>
+                  <option value="goat">Goat</option>
+                  <option value="sheep">Sheep</option>
+                  <option value="poultry">Poultry / Bird</option>
+                  <option value="other">Other</option>
                 </select>
               </div>
 
@@ -285,6 +292,32 @@ export default function Dashboard({ setActivePage, user, historyList, onSelectHi
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Sex</label>
+                  <select
+                    value={newPatient.sex}
+                    onChange={(e) => setNewPatient({ ...newPatient, sex: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">Unknown</option>
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Notes</label>
+                  <input
+                    type="text"
+                    placeholder="Optional"
+                    value={newPatient.notes}
+                    onChange={(e) => setNewPatient({ ...newPatient, notes: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {error && <p className="text-xs font-semibold text-red-700 bg-red-50 border border-red-100 rounded-xl p-3">{error}</p>}
 
               <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
                 <button
@@ -296,9 +329,10 @@ export default function Dashboard({ setActivePage, user, historyList, onSelectHi
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-60"
                 >
-                  Save Patient
+                  {saving ? 'Saving...' : 'Save Patient'}
                 </button>
               </div>
             </form>

@@ -1,0 +1,8 @@
+vet-disease-detector/node_modules/
+vet-disease-detector/dist/
+
+backend/.gocache/
+backend/*.db
+backend/*.db-*
+backend/uploads/
+backend/test-uploads/

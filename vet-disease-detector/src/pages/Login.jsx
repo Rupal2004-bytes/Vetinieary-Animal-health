@@ -1,18 +1,25 @@
 import React, { useState } from 'react';
+import { loginAccount } from '../api/client.js';
 
-export default function Login({ setActivePage, setUser }) {
+export default function Login({ setActivePage, onAuthSuccess }) {
   const [email, setEmail] = useState('vet.doctor@agricare.org');
-  const [password, setPassword] = useState('••••••••');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState('veterinarian');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setUser({
-      name: role === 'veterinarian' ? 'Sarah Jenkins, DVM' : 'Anjan Sharma',
-      email: email,
-      role: role
-    });
-    setActivePage('dashboard');
+    setSubmitting(true);
+    setError('');
+    try {
+      const auth = await loginAccount({ email, password, role });
+      onAuthSuccess?.(auth);
+    } catch (err) {
+      setError(err.message || 'Could not sign in.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -72,6 +79,7 @@ export default function Login({ setActivePage, setUser }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            placeholder="Enter your password"
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
           />
         </div>
@@ -81,11 +89,14 @@ export default function Login({ setActivePage, setUser }) {
           <label htmlFor="remember" className="ml-2 text-slate-600 select-none">Remember this device</label>
         </div>
 
+        {error && <p className="text-red-700 bg-red-50 border border-red-100 rounded-xl p-3 font-semibold">{error}</p>}
+
         <button
           type="submit"
+          disabled={submitting}
           className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md transition-colors text-sm"
         >
-          Sign In to VetScan AI
+          {submitting ? 'Signing in...' : 'Sign In'}
         </button>
       </form>
 
