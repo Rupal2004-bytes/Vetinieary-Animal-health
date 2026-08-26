@@ -1,19 +1,17 @@
 import React, { useState } from 'react';
 import { createAnimal } from '../api/client.js';
 
-export default function Dashboard({ setActivePage, user, historyList, onSelectHistoryItem, animals = [], onRefresh }) {
-  const fallbackPatients = [
-    { id: 'p1', name: 'Buddy', species: 'Dog (Canine)', breed: 'Golden Retriever', age: '2 yrs', weight: '28 kg', lastCheck: 'Today', status: 'Under Evaluation', statusColor: 'bg-amber-100 text-amber-800' },
-    { id: 'p2', name: 'Luna', species: 'Cat (Feline)', breed: 'Persian Mix', age: '3 yrs', weight: '4.2 kg', lastCheck: 'Yesterday', status: 'Stable', statusColor: 'bg-emerald-100 text-emerald-800' },
-    { id: 'p3', name: 'Daisy (Herd #402)', species: 'Cattle (Bovine)', breed: 'Holstein Dairy', age: '4 yrs', weight: '550 kg', lastCheck: '3 days ago', status: 'Vaccinated', statusColor: 'bg-blue-100 text-blue-800' },
-  ];
-  const patients = animals.length > 0 ? animals.map(a => ({
+export default function Dashboard({ setActivePage, user, historyList = [], onSelectHistoryItem, animals = [], onRefresh }) {
+  const safeAnimals = Array.isArray(animals) ? animals : [];
+  const safeHistory = Array.isArray(historyList) ? historyList : [];
+
+  const patients = safeAnimals.map(a => ({
     ...a,
     species: a.species,
     lastCheck: 'Saved profile',
     status: 'Registered',
     statusColor: 'bg-emerald-100 text-emerald-800'
-  })) : fallbackPatients;
+  }));
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [newPatient, setNewPatient] = useState({ name: '', species: 'dog', breed: '', age: '', weight: '', sex: '', notes: '' });
@@ -87,7 +85,7 @@ export default function Dashboard({ setActivePage, user, historyList, onSelectHi
             <span className="text-xs font-bold text-slate-500 uppercase">Total Predictions</span>
             <span className="p-2 bg-blue-50 text-blue-700 rounded-lg text-sm">🔬</span>
           </div>
-          <span className="text-3xl font-black text-slate-900">{historyList.length}</span>
+          <span className="text-3xl font-black text-slate-900">{safeHistory.length}</span>
           <p className="text-[11px] text-slate-400 mt-1">AI differential checks run</p>
         </div>
 
@@ -97,7 +95,7 @@ export default function Dashboard({ setActivePage, user, historyList, onSelectHi
             <span className="p-2 bg-red-50 text-red-700 rounded-lg text-sm">🚨</span>
           </div>
           <span className="text-3xl font-black text-red-600">
-            {historyList.filter(h => h.urgency === 'CRITICAL' || h.triageLevel === 'RED').length}
+            {safeHistory.filter(h => h && (h.urgency === 'CRITICAL' || h.triageLevel === 'RED')).length}
           </span>
           <p className="text-[11px] text-slate-400 mt-1">Critical red-flag triage cases</p>
         </div>
@@ -135,35 +133,47 @@ export default function Dashboard({ setActivePage, user, historyList, onSelectHi
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {patients.map(p => (
-                <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-3.5 px-4 font-bold text-slate-900 flex items-center gap-2">
-                    <span className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
-                      {p.name.charAt(0)}
-                    </span>
-                    <span>{p.name}</span>
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-700">
-                    <div className="font-semibold">{p.species}</div>
-                    <div className="text-[11px] text-slate-400">{p.breed}</div>
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-600">{p.age} • {p.weight}</td>
-                  <td className="py-3.5 px-4 text-slate-500">{p.lastCheck}</td>
-                  <td className="py-3.5 px-4">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.statusColor}`}>
-                      {p.status}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 text-right space-x-2">
-                    <button
-                      onClick={() => setActivePage('prediction')}
-                      className="px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-bold transition-colors"
-                    >
-                      Run Scan
-                    </button>
+              {patients.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="py-8 px-4 text-center text-slate-400">
+                    <span className="text-2xl block mb-1">🐾</span>
+                    No registered animals yet. Click &quot;Add Animal Profile&quot; above to track a patient.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                patients.map(p => {
+                  const pName = p?.name || 'Animal';
+                  return (
+                    <tr key={p?.id || Math.random()} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-slate-900 flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+                          {pName.charAt(0).toUpperCase()}
+                        </span>
+                        <span>{pName}</span>
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-700">
+                        <div className="font-semibold">{p?.species || 'Animal'}</div>
+                        <div className="text-[11px] text-slate-400">{p?.breed || 'Mixed'}</div>
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600">{p?.age || 'Unknown'} • {p?.weight || 'Unknown'}</td>
+                      <td className="py-3.5 px-4 text-slate-500">{p?.lastCheck || 'Recent'}</td>
+                      <td className="py-3.5 px-4">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p?.statusColor || 'bg-emerald-100 text-emerald-800'}`}>
+                          {p?.status || 'Active'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right space-x-2">
+                        <button
+                          onClick={() => setActivePage('prediction')}
+                          className="px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-bold transition-colors"
+                        >
+                          Run Scan
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -180,38 +190,38 @@ export default function Dashboard({ setActivePage, user, historyList, onSelectHi
             onClick={() => setActivePage('history')}
             className="text-xs font-bold text-emerald-600 hover:underline"
           >
-            View Full History ({historyList.length}) →
+            View Full History ({safeHistory.length}) →
           </button>
         </div>
 
-        {historyList.length === 0 ? (
+        {safeHistory.length === 0 ? (
           <div className="text-center py-8 text-slate-400 text-xs">
             No prediction scans run yet. Click "New Diagnostic Scan" to run your first check!
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {historyList.slice(0, 4).map(item => (
+            {safeHistory.slice(0, 4).map(item => (
               <div
-                key={item.id}
-                onClick={() => onSelectHistoryItem && onSelectHistoryItem(item)}
+                key={item?.id || Math.random()}
+                onClick={() => onSelectHistoryItem && item && onSelectHistoryItem(item)}
                 className="p-4 rounded-2xl border border-slate-200 bg-slate-50 hover:bg-white hover:border-emerald-300 transition-all cursor-pointer space-y-2 text-xs"
               >
                 <div className="flex justify-between items-start">
                   <div className="flex items-center space-x-2">
                     <span className="text-base">🐾</span>
-                    <span className="font-bold text-slate-900">{item.patientName} ({item.species})</span>
+                    <span className="font-bold text-slate-900">{item?.patientName || 'Patient'} ({item?.species || 'Animal'})</span>
                   </div>
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                    item.urgency === 'CRITICAL' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                    item?.urgency === 'CRITICAL' || item?.triageLevel === 'RED' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
                   }`}>
-                    {item.urgency}
+                    {item?.urgency || item?.triageLevel || 'MODERATE'}
                   </span>
                 </div>
                 <div className="text-slate-700">
-                  <span className="text-slate-400">Diagnosis:</span> <strong className="text-emerald-800">{item.topDisease}</strong> ({item.confidence}%)
+                  <span className="text-slate-400">Diagnosis:</span> <strong className="text-emerald-800">{item?.topDisease || 'Clinical Assessment'}</strong> ({item?.confidence || 85}%)
                 </div>
                 <div className="flex justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-200">
-                  <span>{item.date}</span>
+                  <span>{item?.date || 'Recent'}</span>
                   <span className="text-emerald-600 font-semibold">View Result Summary →</span>
                 </div>
               </div>

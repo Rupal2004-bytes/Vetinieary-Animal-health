@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { signupAccount } from '../api/client.js';
 
-export default function Signup({ setActivePage, setUser }) {
+export default function Signup({ setActivePage, onAuthSuccess, setUser }) {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -8,16 +9,31 @@ export default function Signup({ setActivePage, setUser }) {
     role: 'owner',
     clinicName: ''
   });
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setUser({
-      name: formData.fullName || 'New User',
-      email: formData.email,
-      role: formData.role
-    });
-    alert('Account created successfully! Welcome to VetScan AI.');
-    setActivePage('dashboard');
+    setSubmitting(true);
+    setError('');
+    try {
+      const auth = await signupAccount({
+        fullName: formData.fullName,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role
+      });
+      if (onAuthSuccess) {
+        onAuthSuccess(auth);
+      } else if (setUser) {
+        setUser(auth.user);
+        setActivePage('dashboard');
+      }
+    } catch (err) {
+      setError(err.message || 'Could not create account.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -88,11 +104,14 @@ export default function Signup({ setActivePage, setUser }) {
           </label>
         </div>
 
+        {error && <p className="text-red-700 bg-red-50 border border-red-100 rounded-xl p-3 font-semibold">{error}</p>}
+
         <button
           type="submit"
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md transition-colors text-sm"
+          disabled={submitting}
+          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md transition-colors text-sm disabled:opacity-60"
         >
-          Complete Registration
+          {submitting ? 'Registering...' : 'Complete Registration'}
         </button>
       </form>
 

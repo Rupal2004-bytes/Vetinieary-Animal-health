@@ -2,9 +2,9 @@ package handlers
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -20,6 +20,8 @@ import (
 
 type Handler struct {
 	DB       *database.DB
+	UserDB   *database.UserDB
+	Backups  *database.BackupManager
 	Storage  storage.Store
 	Vision   ai.VisionProvider
 	VetAI    ai.VeterinaryProvider
@@ -28,11 +30,21 @@ type Handler struct {
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
+	// Health & System
 	mux.HandleFunc("/api/health", h.health)
+
+	// User Authentication & Account Management (backed by user.db)
 	mux.HandleFunc("/api/auth/login", h.login)
 	mux.HandleFunc("/api/auth/signup", h.signup)
+	mux.HandleFunc("/api/auth/register", h.signup)
+	mux.HandleFunc("/api/auth/logout", h.logout)
 	mux.HandleFunc("/api/auth/me", h.me)
+	mux.HandleFunc("/api/auth/profile", h.updateProfile)
+	mux.HandleFunc("/api/auth/change-password", h.changePassword)
+	mux.HandleFunc("/api/auth/logs", h.authLogs)
 	mux.HandleFunc("/api/account/huggingface", h.connectHuggingFace)
+
+	// Core Veterinary Entities & Health Screenings
 	mux.HandleFunc("/api/animals", h.animals)
 	mux.HandleFunc("/api/animals/", h.animalSubroutes)
 	mux.HandleFunc("/api/health-check/upload", h.upload)
@@ -40,41 +52,17 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/health-screenings/", h.screening)
 	mux.HandleFunc("/api/clinics/nearby", h.nearbyClinics)
 	mux.HandleFunc("/api/reminders", h.reminders)
+
+	// Media File Server
 	mux.Handle("/media/", http.StripPrefix("/media/", http.FileServer(http.Dir(h.MediaDir))))
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "demo_mode": true})
-}
-
-func (h *Handler) animals(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		animals, err := h.DB.ListAnimals(r.Context())
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "database_error", "Could not load animals.")
-			return
-		}
-		writeJSON(w, http.StatusOK, animals)
-	case http.MethodPost:
-		var a models.Animal
-		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Please check the animal information.")
-			return
-		}
-		if strings.TrimSpace(a.Name) == "" || strings.TrimSpace(a.Species) == "" {
-			writeError(w, http.StatusBadRequest, "missing_fields", "Animal name and species are required.")
-			return
-		}
-		created, err := h.DB.CreateAnimal(r.Context(), a)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "database_error", "Could not save animal.")
-			return
-		}
-		writeJSON(w, http.StatusCreated, created)
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":        true,
+		"demo_mode": false,
+		"time":      time.Now().Format(time.RFC3339),
+	})
 }
 
 type authRequest struct {
@@ -92,19 +80,23 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 	var req authRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Please check your login details.")
+		writeError(w, http.StatusBadRequest, "invalid_json", "Please check your login credentials format.")
 		return
 	}
-	user, err := h.DB.AuthenticateUser(r.Context(), req.Email, req.Password, req.Role)
+
+	ip := clientIP(r)
+	userAgent := r.UserAgent()
+	authRes, err := h.UserDB.AuthenticateUser(r.Context(), req.Email, req.Password, ip, userAgent)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, sql.ErrNoRows) {
-			status = http.StatusUnauthorized
+		status := http.StatusUnauthorized
+		if !errors.Is(err, database.ErrInvalidCredentials) {
+			status = http.StatusInternalServerError
 		}
-		writeError(w, status, "login_failed", "Email or password is incorrect.")
+		writeError(w, status, "invalid_credentials", "Invalid email or password.")
 		return
 	}
-	writeJSON(w, http.StatusOK, authResponse(user))
+
+	writeJSON(w, http.StatusOK, authRes)
 }
 
 func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
@@ -114,19 +106,53 @@ func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 	}
 	var req authRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Please check your account details.")
+		writeError(w, http.StatusBadRequest, "invalid_json", "Please check your registration details.")
 		return
 	}
+
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		name = req.FullName
+		name = strings.TrimSpace(req.FullName)
 	}
-	user, err := h.DB.CreateUser(r.Context(), models.User{Name: name, Email: req.Email, Role: req.Role}, req.Password)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "signup_failed", "Could not create that account. The email may already be registered.")
+	if name == "" || strings.TrimSpace(req.Email) == "" || len(req.Password) < 4 {
+		writeError(w, http.StatusBadRequest, "invalid_input", "Name, valid email, and password (at least 4 characters) are required.")
 		return
 	}
-	writeJSON(w, http.StatusCreated, authResponse(user))
+
+	ip := clientIP(r)
+	user, err := h.UserDB.CreateUser(r.Context(), models.User{
+		Name:  name,
+		Email: req.Email,
+		Role:  req.Role,
+	}, req.Password, ip)
+
+	if err != nil {
+		if errors.Is(err, database.ErrEmailAlreadyExists) {
+			writeError(w, http.StatusConflict, "email_in_use", "An account with this email address already exists.")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "signup_failed", err.Error())
+		return
+	}
+
+	authRes, err := h.UserDB.AuthenticateUser(r.Context(), req.Email, req.Password, ip, r.UserAgent())
+	if err != nil {
+		writeJSON(w, http.StatusCreated, map[string]any{"user": user})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, authRes)
+}
+
+func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	token := extractToken(r)
+	ip := clientIP(r)
+	_ = h.UserDB.RevokeSession(r.Context(), token, ip)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "Logged out successfully."})
 }
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
@@ -136,10 +162,100 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	}
 	user, ok := h.userFromRequest(r)
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "not_signed_in", "Please sign in.")
+		writeError(w, http.StatusUnauthorized, "not_signed_in", "Please sign in to access your profile.")
 		return
 	}
 	writeJSON(w, http.StatusOK, user)
+}
+
+type updateProfileRequest struct {
+	Name       string `json:"name"`
+	Role       string `json:"role"`
+	Phone      string `json:"phone"`
+	ClinicName string `json:"clinic_name"`
+	AvatarURL  string `json:"avatar_url"`
+}
+
+func (h *Handler) updateProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut && r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	user, ok := h.userFromRequest(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "not_signed_in", "Please sign in to update your profile.")
+		return
+	}
+
+	var req updateProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "Invalid profile update data.")
+		return
+	}
+
+	updated, err := h.UserDB.UpdateProfile(r.Context(), user.ID, req.Name, req.Role, req.Phone, req.ClinicName, req.AvatarURL)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database_error", "Could not update profile: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, updated)
+}
+
+type changePasswordRequest struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+
+func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	user, ok := h.userFromRequest(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "not_signed_in", "Please sign in to change password.")
+		return
+	}
+
+	var req changePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "Invalid password data.")
+		return
+	}
+
+	if len(req.NewPassword) < 4 {
+		writeError(w, http.StatusBadRequest, "invalid_password", "New password must be at least 4 characters.")
+		return
+	}
+
+	ip := clientIP(r)
+	if err := h.UserDB.ChangePassword(r.Context(), user.ID, req.OldPassword, req.NewPassword, ip); err != nil {
+		writeError(w, http.StatusBadRequest, "password_change_failed", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "Password changed successfully."})
+}
+
+func (h *Handler) authLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	user, ok := h.userFromRequest(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "not_signed_in", "Please sign in to view security activity.")
+		return
+	}
+
+	logs, err := h.UserDB.GetAuthLogs(r.Context(), user.ID, 30)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database_error", "Could not retrieve activity logs.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, logs)
 }
 
 type hfConnectRequest struct {
@@ -162,15 +278,48 @@ func (h *Handler) connectHuggingFace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !strings.HasPrefix(strings.TrimSpace(req.Token), "hf_") {
-		writeError(w, http.StatusBadRequest, "invalid_token", "Please enter a valid Hugging Face access token.")
+		writeError(w, http.StatusBadRequest, "invalid_token", "Please enter a valid Hugging Face access token (starts with hf_).")
 		return
 	}
-	user, err := h.DB.SetHuggingFaceConnected(r.Context(), user.ID, true)
+	updated, err := h.UserDB.SetHuggingFaceConnected(r.Context(), user.ID, true)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "database_error", "Could not update your account connection.")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"user": user, "connected": true})
+	writeJSON(w, http.StatusOK, map[string]any{"user": updated, "connected": true})
+}
+
+func (h *Handler) animals(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		animals, err := h.DB.ListAnimals(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", "Could not load animals.")
+			return
+		}
+		writeJSON(w, http.StatusOK, animals)
+	case http.MethodPost:
+		var a models.Animal
+		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", "Please check the animal information.")
+			return
+		}
+		if strings.TrimSpace(a.Name) == "" || strings.TrimSpace(a.Species) == "" {
+			writeError(w, http.StatusBadRequest, "missing_fields", "Animal name and species are required.")
+			return
+		}
+		if user, ok := h.userFromRequest(r); ok {
+			a.UserID = user.ID
+		}
+		created, err := h.DB.CreateAnimal(r.Context(), a)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", "Could not save animal.")
+			return
+		}
+		writeJSON(w, http.StatusCreated, created)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
 }
 
 func (h *Handler) animalSubroutes(w http.ResponseWriter, r *http.Request) {
@@ -188,9 +337,6 @@ func (h *Handler) animalSubroutes(w http.ResponseWriter, r *http.Request) {
 		animal, err := h.DB.GetAnimal(r.Context(), id)
 		if err != nil {
 			status := http.StatusInternalServerError
-			if errors.Is(err, sql.ErrNoRows) {
-				status = http.StatusNotFound
-			}
 			writeError(w, status, "not_found", "Animal not found.")
 			return
 		}
@@ -248,6 +394,7 @@ type analyzeRequest struct {
 	AnimalID int64               `json:"animal_id"`
 	Animal   models.Animal       `json:"animal"`
 	MediaID  int64               `json:"media_id"`
+	MediaURL string              `json:"media_url"`
 	Symptoms models.SymptomInput `json:"symptoms"`
 }
 
@@ -261,36 +408,68 @@ func (h *Handler) analyze(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_json", "Please check the health screening information.")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
 	defer cancel()
 	ctx = ai.WithHuggingFaceToken(ctx, bearerToken(r))
-	animal, err := h.resolveAnimal(ctx, req)
+
+	animal, err := h.resolveAnimal(ctx, req, r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "animal_required", "Please provide or select an animal before analysis.")
-		return
+		animal = models.Animal{Name: "Patient", Species: "Animal"}
 	}
+
 	var media models.Media
 	if req.MediaID != 0 {
 		media, err = h.DB.GetMedia(ctx, req.MediaID)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "media_not_found", "Uploaded media was not found.")
-			return
+			if req.MediaURL != "" {
+				media = models.Media{URL: req.MediaURL, Type: "image", MIMEType: "image/jpeg"}
+			} else {
+				writeError(w, http.StatusBadRequest, "media_not_found", "Uploaded media was not found.")
+				return
+			}
 		}
+	} else if req.MediaURL != "" {
+		media = models.Media{URL: req.MediaURL, Type: "image", MIMEType: "image/jpeg"}
 	}
+
 	visual, err := h.Vision.AnalyzeMedia(ctx, media, animal, req.Symptoms)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "ai_provider_unavailable", "Visual analysis is temporarily unavailable.")
+		writeError(w, http.StatusBadGateway, "ai_provider_unavailable", "Visual analysis error: "+err.Error())
 		return
 	}
+	if visual.Animal != "" && (animal.Species == "" || animal.Species == "Animal" || animal.Species == "animal" || animal.Species == "Unnamed Animal") {
+		animal.Species = visual.Animal
+	}
+
+	if animal.ID == 0 {
+		userID := int64(1)
+		if user, ok := h.userFromRequest(r); ok {
+			userID = user.ID
+		}
+		species := animal.Species
+		if species == "" {
+			species = "Animal"
+		}
+		createdAnimal, err := h.DB.CreateAnimal(ctx, models.Animal{
+			UserID:  userID,
+			Name:    "Patient",
+			Species: species,
+		})
+		if err == nil {
+			animal = createdAnimal
+		}
+	}
+
 	assessment, err := h.VetAI.Assess(ctx, models.ClinicalInput{Animal: animal, VisualAnalysis: visual, Symptoms: req.Symptoms, Media: media})
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "ai_provider_unavailable", "Veterinary reasoning is temporarily unavailable.")
+		writeError(w, http.StatusBadGateway, "ai_provider_unavailable", "Veterinary reasoning error: "+err.Error())
 		return
 	}
 	if err := ai.ValidateAssessment(assessment); err != nil {
 		writeError(w, http.StatusBadGateway, "invalid_ai_json", "The AI response could not be safely interpreted.")
 		return
 	}
+
 	screening, err := h.DB.CreateScreening(ctx, models.HealthScreening{
 		AnimalID:       animal.ID,
 		MediaURL:       media.URL,
@@ -301,22 +480,32 @@ func (h *Handler) analyze(w http.ResponseWriter, r *http.Request) {
 		Urgency:        assessment.Urgency,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "database_error", "Could not save the health screening.")
+		log.Printf("Failed to save health screening: %v (animal_id=%d, media_url=%s)", err, animal.ID, media.URL)
+		writeError(w, http.StatusInternalServerError, "database_error", "Could not save the health screening: "+err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, screening)
 }
 
-func (h *Handler) resolveAnimal(ctx context.Context, req analyzeRequest) (models.Animal, error) {
+func (h *Handler) resolveAnimal(ctx context.Context, req analyzeRequest, r *http.Request) (models.Animal, error) {
 	if req.AnimalID != 0 {
 		return h.DB.GetAnimal(ctx, req.AnimalID)
 	}
-	if strings.TrimSpace(req.Animal.Name) == "" {
-		req.Animal.Name = "Unnamed Animal"
+	userID := int64(1)
+	if user, ok := h.userFromRequest(r); ok {
+		userID = user.ID
 	}
-	if strings.TrimSpace(req.Animal.Species) == "" {
-		return models.Animal{}, errors.New("missing species")
+	name := strings.TrimSpace(req.Animal.Name)
+	if name == "" {
+		name = "Patient"
 	}
+	species := strings.TrimSpace(req.Animal.Species)
+	if species == "" {
+		species = "Animal"
+	}
+	req.Animal.UserID = userID
+	req.Animal.Name = name
+	req.Animal.Species = species
 	return h.DB.CreateAnimal(ctx, req.Animal)
 }
 
@@ -340,28 +529,31 @@ func (h *Handler) screening(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) nearbyClinics(w http.ResponseWriter, r *http.Request) {
 	urgency := r.URL.Query().Get("urgency")
-	clinics, err := h.Clinics.Nearby(r.Context(), 0, 0, urgency)
+	clinicsList, err := h.Clinics.Nearby(r.Context(), 0, 0, urgency)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "clinic_error", "Could not load nearby veterinary services.")
+		writeError(w, http.StatusInternalServerError, "clinics_unavailable", "Could not find nearby veterinary clinics.")
 		return
 	}
-	writeJSON(w, http.StatusOK, clinics)
+	writeJSON(w, http.StatusOK, clinicsList)
 }
 
 func (h *Handler) reminders(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		reminders, err := h.DB.ListReminders(r.Context())
+		remindersList, err := h.DB.ListReminders(r.Context())
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "database_error", "Could not load reminders.")
 			return
 		}
-		writeJSON(w, http.StatusOK, reminders)
+		writeJSON(w, http.StatusOK, remindersList)
 	case http.MethodPost:
 		var rmd models.Reminder
 		if err := json.NewDecoder(r.Body).Decode(&rmd); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Please check the reminder information.")
+			writeError(w, http.StatusBadRequest, "invalid_json", "Please check the reminder details.")
 			return
+		}
+		if user, ok := h.userFromRequest(r); ok {
+			rmd.UserID = user.ID
 		}
 		created, err := h.DB.CreateReminder(r.Context(), rmd)
 		if err != nil {
@@ -373,6 +565,8 @@ func (h *Handler) reminders(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
+
+// Helpers
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -395,25 +589,54 @@ func formFile(r *http.Request, names ...string) (multipart.File, *multipart.File
 }
 
 func bearerToken(r *http.Request) string {
+	if token := strings.TrimSpace(r.Header.Get("X-HuggingFace-Token")); strings.HasPrefix(token, "hf_") {
+		return token
+	}
 	auth := strings.TrimSpace(r.Header.Get("Authorization"))
 	if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
-		return strings.TrimSpace(auth[7:])
+		token := strings.TrimSpace(auth[7:])
+		if strings.HasPrefix(token, "hf_") {
+			return token
+		}
 	}
-	return strings.TrimSpace(r.Header.Get("X-HuggingFace-Token"))
+	return ""
+}
+
+func extractToken(r *http.Request) string {
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+		token := strings.TrimSpace(auth[7:])
+		if !strings.HasPrefix(token, "hf_") {
+			return token
+		}
+	}
+	if tok := strings.TrimSpace(r.Header.Get("X-Auth-Token")); tok != "" {
+		return tok
+	}
+	return strings.TrimSpace(r.Header.Get("X-User-ID"))
 }
 
 func (h *Handler) userFromRequest(r *http.Request) (models.User, bool) {
-	id, err := strconv.ParseInt(strings.TrimSpace(r.Header.Get("X-User-ID")), 10, 64)
-	if err != nil || id == 0 {
-		return models.User{}, false
+	token := extractToken(r)
+	if token != "" {
+		if user, err := h.UserDB.GetUserByToken(r.Context(), token); err == nil {
+			return user, true
+		}
+		if id, err := strconv.ParseInt(token, 10, 64); err == nil && id > 0 {
+			if user, err := h.UserDB.GetUserByID(r.Context(), id); err == nil {
+				return user, true
+			}
+		}
 	}
-	user, err := h.DB.GetUser(r.Context(), id)
-	return user, err == nil
+	return models.User{}, false
 }
 
-func authResponse(user models.User) map[string]any {
-	return map[string]any{
-		"user":  user,
-		"token": strconv.FormatInt(user.ID, 10),
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		return strings.TrimSpace(strings.Split(xff, ",")[0])
 	}
+	if xrip := r.Header.Get("X-Real-IP"); xrip != "" {
+		return strings.TrimSpace(xrip)
+	}
+	return strings.TrimSpace(strings.Split(r.RemoteAddr, ":")[0])
 }

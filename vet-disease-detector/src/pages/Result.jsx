@@ -33,7 +33,10 @@ export default function Result({
     );
   }
 
-  const { patient, topMatches, triageStatus, evaluatedAt, scannerOverride } = activeResult;
+  const patient = activeResult.patient || {};
+  const topMatches = Array.isArray(activeResult.topMatches) ? activeResult.topMatches : [];
+  const triageStatus = activeResult.triageStatus || { level: 'GREEN', title: 'Routine Triage', message: 'No critical acute conditions flagged.' };
+  const evaluatedAt = activeResult.evaluatedAt || new Date().toLocaleString();
   const assessment = activeResult.assessment || {};
   const visual = activeResult.visualAnalysis || {};
 
@@ -45,16 +48,24 @@ export default function Result({
     <div className="space-y-8">
       
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm">
         <div>
           <div className="flex items-center space-x-2">
             <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full uppercase">
-              Differential Assessment
+              AI Veterinary Diagnostic Assessment
             </span>
             <span className="text-xs text-slate-400">Generated {evaluatedAt}</span>
           </div>
-          <h1 className="text-2xl font-black text-slate-900 mt-1">Diagnostic Prediction Report</h1>
-          <p className="text-xs text-slate-500">Patient: <strong className="text-slate-800">{patient?.name || 'Patient'}</strong> ({patient?.species?.toUpperCase()} • {patient?.breed})</p>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mt-2">
+            Diagnostic & Triage Assessment Report
+          </h1>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-xs text-slate-500 font-semibold">Identified Species:</span>
+            <span className="text-xs font-black uppercase text-emerald-950 bg-emerald-100/90 border border-emerald-300 px-3 py-1 rounded-xl shadow-sm">
+              🐾 {visual?.animal || patient?.species || 'Animal Subject'}
+            </span>
+            {visual?.image_quality && <span className="text-xs text-slate-400">({visual.image_quality})</span>}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -74,7 +85,7 @@ export default function Result({
       </div>
 
       {/* Triage Urgency Level Card */}
-      <div className={`p-6 rounded-3xl border-2 ${
+      <div className={`p-6 sm:p-8 rounded-3xl border-2 shadow-sm ${
         triageStatus.level === 'RED'
           ? 'bg-red-50/90 border-red-300 text-red-950 badge-pulse-red'
           : triageStatus.level === 'AMBER'
@@ -106,33 +117,42 @@ export default function Result({
         )}
       </div>
 
-      {/* Patient Summary & Symptoms Overview */}
+      {/* Visual Observation & Clinical Signs Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-2 text-xs">
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3 text-xs">
           <h3 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] pb-2 border-b border-slate-100">
-            Patient Parameters
+            Detected Anatomical Profile
           </h3>
-          <div className="space-y-1.5 text-slate-700">
-            <div><span className="text-slate-400">Species:</span> <strong>{patient?.species?.toUpperCase()}</strong></div>
-            <div><span className="text-slate-400">Breed:</span> {patient?.breed}</div>
-            <div><span className="text-slate-400">Age:</span> {patient?.age}</div>
-            <div><span className="text-slate-400">Weight:</span> {patient?.weight}</div>
-            <div><span className="text-slate-400">Vaccine:</span> {patient?.vaccineStatus}</div>
-            <div><span className="text-slate-400">Onset:</span> {patient?.duration}</div>
+          <div className="space-y-2 text-slate-700">
+            <div><span className="text-slate-400">Identified Species:</span> <strong className="text-slate-900">{visual?.animal || patient?.species || 'Animal Subject'}</strong></div>
+            {visual?.affected_body_parts && visual.affected_body_parts.length > 0 && (
+              <div><span className="text-slate-400">Affected Regions:</span> <strong className="text-slate-900">{visual.affected_body_parts.join(', ')}</strong></div>
+            )}
+            {visual?.severity_of_visible_symptoms && (
+              <div><span className="text-slate-400">Visual Severity:</span> <span className="uppercase font-bold text-emerald-800">{visual.severity_of_visible_symptoms}</span></div>
+            )}
+            {visual?.image_quality && (
+              <div><span className="text-slate-400">Image Quality:</span> <span>{visual.image_quality}</span></div>
+            )}
           </div>
         </div>
 
-        <div className="md:col-span-2 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-2 text-xs">
+        <div className="md:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3 text-xs">
           <h3 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] pb-2 border-b border-slate-100">
-            Reported Clinical Signs ({activeResult.symptoms?.length || 0})
+            Computer Vision Clinical Observations
           </h3>
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {activeResult.symptoms && activeResult.symptoms.map((s, idx) => (
-              <span key={idx} className="bg-slate-100 text-slate-800 px-3 py-1 rounded-xl font-semibold">
-                ● {s.replace(/_/g, ' ')}
-              </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            {(visual?.visible_abnormalities || []).map((item, idx) => (
+              <div key={idx} className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 font-semibold text-slate-700">
+                • {item}
+              </div>
             ))}
           </div>
+          {visual?.lesion_description && (
+            <p className="bg-emerald-50/50 border border-emerald-100/60 rounded-xl p-3 text-slate-700 leading-relaxed mt-2">
+              {visual.lesion_description}
+            </p>
+          )}
         </div>
       </div>
 
@@ -240,7 +260,7 @@ export default function Result({
           <p className="text-xs font-semibold text-red-700 bg-red-50 border border-red-100 rounded-xl p-3">{clinicError}</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {clinics.map(clinic => (
+            {(Array.isArray(clinics) ? clinics : []).map(clinic => (
               <div key={clinic.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-2">
                 <div className="flex justify-between gap-2">
                   <strong className="text-slate-900">{clinic.name}</strong>

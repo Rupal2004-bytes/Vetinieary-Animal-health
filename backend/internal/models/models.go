@@ -3,13 +3,72 @@ package models
 import "time"
 
 type User struct {
-	ID           int64     `json:"id"`
-	Name         string    `json:"name"`
-	Email        string    `json:"email"`
-	Role         string    `json:"role"`
-	HFConnected  bool      `json:"hf_connected"`
-	PasswordHash string    `json:"-"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           int64      `json:"id"`
+	Name         string     `json:"name"`
+	Email        string     `json:"email"`
+	Role         string     `json:"role"`
+	HFConnected  bool       `json:"hf_connected"`
+	Phone        string     `json:"phone,omitempty"`
+	ClinicName   string     `json:"clinic_name,omitempty"`
+	AvatarURL    string     `json:"avatar_url,omitempty"`
+	PasswordHash string     `json:"-"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	LastLoginAt  *time.Time `json:"last_login_at,omitempty"`
+}
+
+type AuthSession struct {
+	Token     string    `json:"token"`
+	UserID    int64     `json:"user_id"`
+	UserAgent string    `json:"user_agent"`
+	IPAddress string    `json:"ip_address"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type AuthResponse struct {
+	User      User      `json:"user"`
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type AuthLog struct {
+	ID        int64     `json:"id"`
+	UserID    int64     `json:"user_id"`
+	Email     string    `json:"email"`
+	Event     string    `json:"event"`
+	IPAddress string    `json:"ip_address"`
+	Details   string    `json:"details"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type BackupMeta struct {
+	Filename      string    `json:"filename"`
+	Database      string    `json:"database"`
+	Path          string    `json:"path"`
+	SizeBytes     int64     `json:"size_bytes"`
+	SizeFormatted string    `json:"size_formatted"`
+	SHA256        string    `json:"sha256"`
+	CreatedAt     time.Time `json:"created_at"`
+	Status        string    `json:"status"`
+}
+
+type MigrationInfo struct {
+	Version   int       `json:"version"`
+	Name      string    `json:"name"`
+	AppliedAt time.Time `json:"applied_at"`
+}
+
+type DatabaseHealth struct {
+	Database       string          `json:"database"`
+	Path           string          `json:"path"`
+	IntegrityOK    bool            `json:"integrity_ok"`
+	QuickCheckOK   bool            `json:"quick_check_ok"`
+	TotalTables    int             `json:"total_tables"`
+	SizeBytes      int64           `json:"size_bytes"`
+	SizeFormatted  string          `json:"size_formatted"`
+	CurrentVersion int             `json:"current_version"`
+	Migrations     []MigrationInfo `json:"migrations"`
 }
 
 type Animal struct {

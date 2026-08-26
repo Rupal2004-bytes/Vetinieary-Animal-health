@@ -1,0 +1,9 @@
+2026/08/26 01:39:41 User account database loaded (./user.db) with bcrypt security and versioned migrations
+2026/08/26 01:39:41 Application database loaded (./animal_health.db) with versioned migrations
+2026/08/26 01:39:41 ==== Internal Database Health & Schema Verification ====
+2026/08/26 01:39:41   • user.db: ✅ HEALTHY | Schema v2 (2 applied migrations) | 4 tables | Size: 52.0 KB
+2026/08/26 01:39:41   • animal_health.db: ✅ HEALTHY | Schema v2 (2 applied migrations) | 6 tables | Size: 40.0 KB
+2026/08/26 01:39:41 ========================================================
+2026/08/26 01:39:41 Live Hugging Face AI provider enabled (vision=Qwen/Qwen2.5-VL-72B-Instruct, veterinary=Qwen/Qwen2.5-72B-Instruct)
+2026/08/26 01:39:41 Animal Health AI backend listening on :8080 (demo_mode=false)
+2026/08/26 01:39:41 Startup database snapshot verified in ./backups

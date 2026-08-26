@@ -6,3 +6,7 @@ backend/*.db
 backend/*.db-*
 backend/uploads/
 backend/test-uploads/
+
+**/*.db
+**/.env
+**/backups

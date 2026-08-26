@@ -2,118 +2,90 @@ import React, { useEffect, useRef, useState } from 'react';
 import { uploadHealthMedia } from '../api/client.js';
 
 export default function Prediction({
-  speciesList,
-  symptomCategories,
-  diseasesDatabase,
-  scannerPresets,
-  selectedSpecies,
-  setSelectedSpecies,
+  scannerPresets = [],
   onRunPrediction,
   setActivePage,
-  animals = [],
   apiError = '',
   isAnalyzing = false
 }) {
-  const [activeMode, setActiveMode] = useState('symptoms'); // 'symptoms' or 'scanner'
-  const [patient, setPatient] = useState({
-    name: 'Buddy',
-    species: selectedSpecies || 'dog',
-    breed: 'Golden Retriever',
-    age: '2 years',
-    weight: '28 kg',
-    vaccineStatus: 'up_to_date',
-    duration: '1-3 Days'
-  });
-  const [selectedSymptoms, setSelectedSymptoms] = useState(new Set(['fever', 'lethargy', 'vomiting']));
-  const [symptomDetails, setSymptomDetails] = useState({
-    duration: '1-3 Days',
-    getting_worse: false,
-    recent_injury: false,
-    recent_vaccination: true,
-    contact_sick_animals: false,
-    other: ''
-  });
+  const safeScannerPresets = Array.isArray(scannerPresets) ? scannerPresets : [];
 
-  // Scanner state
   const [scanImage, setScanImage] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [mediaId, setMediaId] = useState(0);
-  const [mediaFileName, setMediaFileName] = useState('');
-  const [isScanning, setIsScanning] = useState(false);
-  const [scannerResult, setScannerResult] = useState(null);
+  const [clinicalNotes, setClinicalNotes] = useState('');
   const [uploadError, setUploadError] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState('');
+  const [dragActive, setDragActive] = useState(false);
+  const [pipelineStep, setPipelineStep] = useState(0);
+
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const fileInputRef = useRef(null);
 
-  useEffect(() => () => stopCamera(), []);
+  useEffect(() => {
+    return () => stopCamera();
+  }, []);
 
-  const toggleSymptom = (symId) => {
-    const next = new Set(selectedSymptoms);
-    if (next.has(symId)) next.delete(symId);
-    else next.add(symId);
-    setSelectedSymptoms(next);
-  };
-
-  const handlePredictSubmit = async (e) => {
+  const handleDrag = (e) => {
     e.preventDefault();
-    if (selectedSymptoms.size === 0) {
-      alert('Please select at least 1 observed symptom to run the differential AI diagnostic algorithm.');
-      return;
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true);
+    else if (e.type === 'dragleave') setDragActive(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleProcessFile(e.dataTransfer.files[0]);
     }
-    await onRunPrediction({
-      patient: { ...patient, species: selectedSpecies },
-      symptoms: Array.from(selectedSymptoms),
-      symptomDetails: { ...symptomDetails, duration: patient.duration, symptoms: Array.from(selectedSymptoms) },
-      mediaId
-    });
   };
 
-  const handlePresetScan = (preset) => {
-    setScanImage(preset.thumbnail);
-    setIsScanning(true);
-    setScannerResult(null);
-
-    setTimeout(() => {
-      setIsScanning(false);
-      setScannerResult(preset);
-    }, 1600);
+  const handleFileInput = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleProcessFile(e.target.files[0]);
+      e.target.value = '';
+    }
   };
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    await uploadAndPreview(file);
-  };
-
-  const uploadAndPreview = async (file) => {
+  const handleProcessFile = async (file) => {
+    stopCamera();
+    setSelectedFile(file);
     setUploadError('');
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setScanImage(event.target.result);
-      setIsScanning(true);
-    };
-    reader.readAsDataURL(file);
+    setIsUploading(true);
+    const previewUrl = URL.createObjectURL(file);
+    setScanImage(previewUrl);
+
     try {
       const media = await uploadHealthMedia(file);
-      setMediaId(media.id);
-      setMediaFileName(file.name);
-      setScannerResult({
-        id: `media_${media.id}`,
-        detectedDisease: 'Ready for AI health screening',
-        confidence: 0,
-        lesionType: 'Media uploaded to backend. Run full assessment to combine visual analysis, symptoms, and animal history.',
-        severity: 'PENDING FULL ASSESSMENT',
-        recommendedTest: 'Veterinary exam if symptoms persist or worsen.',
-        actionPlan: 'Continue to the full AI health assessment.',
-        species: patient.species
-      });
-    } catch (error) {
-      setUploadError(error.message || 'Upload failed.');
-      setScanImage(null);
+      setMediaId(media?.id || 0);
+    } catch (err) {
+      console.warn('Upload delayed, will retry on submit:', err);
+      setMediaId(0);
     } finally {
-      setIsScanning(false);
+      setIsUploading(false);
     }
+  };
+
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+  const [recordDuration, setRecordDuration] = useState(0);
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
+  const recordTimerRef = useRef(null);
+
+  const isVideoMedia = selectedFile?.type?.startsWith('video/') ||
+    (scanImage && (scanImage.endsWith('.mp4') || scanImage.endsWith('.webm') || scanImage.endsWith('.mov')));
+
+  const handlePresetSelect = (preset) => {
+    stopCamera();
+    setSelectedFile(null);
+    setScanImage(preset.thumbnail);
+    setMediaId(0);
+    setClinicalNotes(preset.title ? `Lesion observed: ${preset.title}` : '');
   };
 
   const startCamera = async () => {
@@ -124,21 +96,26 @@ export default function Prediction({
       setCameraOpen(true);
       setTimeout(() => {
         if (videoRef.current) videoRef.current.srcObject = stream;
-      }, 0);
-    } catch (error) {
-      setCameraError('Camera permission denied. You can upload an existing image instead.');
+      }, 50);
+    } catch {
+      setCameraError('Camera access was denied or is unavailable on this device.');
     }
   };
 
   const stopCamera = () => {
+    if (isRecordingVideo) {
+      stopVideoRecording();
+    }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
     setCameraOpen(false);
+    setIsRecordingVideo(false);
+    setRecordDuration(0);
   };
 
-  const captureImage = () => {
+  const capturePhoto = () => {
     const video = videoRef.current;
     if (!video) return;
     const canvas = document.createElement('canvas');
@@ -147,429 +124,457 @@ export default function Prediction({
     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(async (blob) => {
       if (!blob) return;
-      const file = new File([blob], `camera-capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const file = new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
       stopCamera();
-      await uploadAndPreview(file);
+      await handleProcessFile(file);
     }, 'image/jpeg', 0.9);
   };
 
-  const runVisualAssessment = async () => {
-    if (!mediaId && !scanImage) {
-      setUploadError('Upload or capture an image/video before running visual analysis.');
+  const startVideoRecording = () => {
+    if (!streamRef.current) return;
+    recordedChunksRef.current = [];
+    setIsRecordingVideo(true);
+    setRecordDuration(0);
+
+    const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' :
+      MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : 'video/mp4';
+
+    try {
+      const recorder = new MediaRecorder(streamRef.current, { mimeType: mime });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          recordedChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        clearInterval(recordTimerRef.current);
+        const ext = mime.includes('mp4') ? 'mp4' : 'webm';
+        const blob = new Blob(recordedChunksRef.current, { type: mime });
+        const file = new File([blob], `gait-motion-${Date.now()}.${ext}`, { type: mime });
+        stopCamera();
+        await handleProcessFile(file);
+      };
+
+      recorder.start(250);
+      recordTimerRef.current = setInterval(() => {
+        setRecordDuration((prev) => {
+          if (prev >= 12) {
+            stopVideoRecording();
+            return 12;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch (err) {
+      console.error('MediaRecorder error:', err);
+      setCameraError('Video recording unsupported on this browser. Please upload a video file instead.');
+      setIsRecordingVideo(false);
+    }
+  };
+
+  const stopVideoRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    clearInterval(recordTimerRef.current);
+    setIsRecordingVideo(false);
+  };
+
+  const handleSubmitAnalysis = async (e) => {
+    if (e) e.preventDefault();
+    if (!scanImage && !selectedFile) {
+      alert('Please upload a photo/video or capture one first.');
       return;
     }
-    await onRunPrediction({
-      patient: { ...patient, species: selectedSpecies },
-      symptoms: Array.from(selectedSymptoms),
-      symptomDetails: { ...symptomDetails, duration: patient.duration, symptoms: Array.from(selectedSymptoms) },
-      mediaId
-    });
+
+    let effectiveMediaId = mediaId;
+    if (!effectiveMediaId && selectedFile) {
+      setIsUploading(true);
+      try {
+        const media = await uploadHealthMedia(selectedFile);
+        effectiveMediaId = media?.id || 0;
+        setMediaId(effectiveMediaId);
+      } catch (err) {
+        console.error('Failed to upload media before submission:', err);
+      } finally {
+        setIsUploading(false);
+      }
+    }
+
+    setPipelineStep(1);
+    const timer = setTimeout(() => setPipelineStep(2), 1800);
+
+    try {
+      await onRunPrediction({
+        mediaId: effectiveMediaId,
+        mediaUrl: scanImage,
+        notes: clinicalNotes,
+        symptoms: clinicalNotes ? [clinicalNotes] : []
+      });
+    } finally {
+      clearTimeout(timer);
+      setPipelineStep(0);
+    }
   };
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-4xl mx-auto space-y-8">
       
-      {/* Header Mode Toggle */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header */}
+      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full uppercase">
-            AI Clinical Prediction Engine
-          </span>
-          <h1 className="text-2xl font-black text-slate-900 mt-1.5">Disease Detection Suite</h1>
-          <p className="text-xs text-slate-500">Choose between multi-symptom differential analysis or visual lesion photo scanning</p>
+          <div className="flex items-center space-x-2">
+            <span className="text-xs font-black uppercase bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
+              Automated Computer Vision & Multimodal Clinical Reasoning
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mt-2">
+            Veterinary AI Health Diagnostic Scanner
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Feed any animal photo or gait/motion video into the AI scanner to detect species characteristics and derive full clinical differential diagnoses.
+          </p>
         </div>
 
-        <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setActiveMode('symptoms')}
-            className={`px-4 py-2 rounded-lg transition-all ${activeMode === 'symptoms' ? 'bg-white text-emerald-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-          >
-            🩺 Symptom Checker
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveMode('scanner')}
-            className={`px-4 py-2 rounded-lg transition-all ${activeMode === 'scanner' ? 'bg-white text-emerald-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-          >
-            📷 Visual AI Scanner
-          </button>
-        </div>
+        <button
+          onClick={() => setActivePage('home')}
+          className="self-start sm:self-auto text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 px-4 py-2 rounded-xl transition-colors"
+        >
+          ← Back to Home
+        </button>
       </div>
 
-      {/* MODE 1: SYMPTOM CHECKER */}
-      {activeMode === 'symptoms' && (
-        <form onSubmit={handlePredictSubmit} className="space-y-8">
-          
-          {/* Step 1: Species Selection */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">Step 1: Choose Animal Species</h2>
-                <p className="text-xs text-slate-500">Pathology rules and diagnostic scores adapt to species physiology</p>
+      {/* Main Scanner Section */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm space-y-6">
+        
+        {cameraOpen ? (
+          <div className="relative rounded-2xl overflow-hidden bg-black aspect-video max-h-[420px] mx-auto flex items-center justify-center border-2 border-emerald-500 shadow-xl">
+            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+            <div className="absolute inset-0 border-2 border-emerald-400/40 pointer-events-none rounded-2xl animate-pulse"></div>
+            
+            {isRecordingVideo && (
+              <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 text-white text-xs font-black px-3 py-1.5 rounded-full backdrop-blur-md animate-pulse">
+                <span className="w-2.5 h-2.5 rounded-full bg-white"></span>
+                <span>REC {recordDuration}s / 12s</span>
               </div>
-              <span className="text-xs font-semibold text-emerald-600">Active: {selectedSpecies.toUpperCase()}</span>
-            </div>
+            )}
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-              {speciesList.map(sp => (
+            <div className="absolute bottom-4 left-0 right-0 flex flex-wrap justify-center gap-2.5 px-4">
+              {!isRecordingVideo ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={capturePhoto}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-5 py-2.5 rounded-xl shadow-lg flex items-center gap-2 text-xs transition-all"
+                  >
+                    <span>📸 Capture Photo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startVideoRecording}
+                    className="bg-red-600 hover:bg-red-500 text-white font-black px-5 py-2.5 rounded-xl shadow-lg flex items-center gap-2 text-xs transition-all"
+                  >
+                    <span>🔴 Record Motion (10s)</span>
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
-                  key={sp.id}
-                  onClick={() => {
-                    setSelectedSpecies(sp.id);
-                    setPatient({ ...patient, species: sp.id });
-                  }}
-                  className={`p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center text-center ${
-                    selectedSpecies === sp.id
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold shadow-sm'
-                      : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                  }`}
+                  onClick={stopVideoRecording}
+                  className="bg-white hover:bg-slate-100 text-red-600 font-black px-6 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs transition-all"
                 >
-                  <span className="text-2xl mb-1">{sp.icon}</span>
-                  <span className="text-xs truncate w-full">{sp.name.split(' ')[0]}</span>
+                  <span className="w-3 h-3 bg-red-600 rounded-sm"></span>
+                  <span>Finish & Analyze Video</span>
                 </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Step 2: Patient Profile Inputs */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-            <h2 className="text-base font-bold text-slate-900 pb-3 border-b border-slate-100">
-              Step 2: Patient Information
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
-              {animals.length > 0 && (
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Saved Animal</label>
-                  <select
-                    value={patient.id || ''}
-                    onChange={(e) => {
-                      const animal = animals.find(a => String(a.id) === e.target.value);
-                      if (animal) {
-                        setPatient({ ...patient, ...animal, duration: patient.duration, vaccineStatus: patient.vaccineStatus });
-                        setSelectedSpecies(animal.species);
-                      }
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="">New animal</option>
-                    {animals.map(animal => <option key={animal.id} value={animal.id}>{animal.name} ({animal.species})</option>)}
-                  </select>
-                </div>
               )}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Name / Tag</label>
-                <input
-                  type="text"
-                  value={patient.name}
-                  onChange={(e) => setPatient({ ...patient, name: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Breed</label>
-                <input
-                  type="text"
-                  value={patient.breed}
-                  onChange={(e) => setPatient({ ...patient, breed: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Age</label>
-                <select
-                  value={patient.age}
-                  onChange={(e) => setPatient({ ...patient, age: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option>Young / Puppy / Calf (&lt; 1 yr)</option>
-                  <option>Adult (1 - 7 yrs)</option>
-                  <option>Senior (&gt; 7 yrs)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Weight</label>
-                <input
-                  type="text"
-                  value={patient.weight}
-                  onChange={(e) => setPatient({ ...patient, weight: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Vaccination</label>
-                <select
-                  value={patient.vaccineStatus}
-                  onChange={(e) => setPatient({ ...patient, vaccineStatus: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="up_to_date">Fully Vaccinated</option>
-                  <option value="partially">Partially Vaccinated</option>
-                  <option value="unvaccinated">Unvaccinated</option>
-                </select>
-              </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Duration</label>
-                <select
-                  value={patient.duration}
-                  onChange={(e) => setPatient({ ...patient, duration: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option>Sudden / Acute (&lt; 24h)</option>
-                  <option>1-3 Days</option>
-                  <option>4-7 Days</option>
-                  <option>Chronic (&gt; 1 Week)</option>
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs pt-3 border-t border-slate-100">
-              <label className="flex items-center gap-2 font-semibold text-slate-700"><input type="checkbox" checked={symptomDetails.getting_worse} onChange={(e) => setSymptomDetails({ ...symptomDetails, getting_worse: e.target.checked })} /> Getting worse</label>
-              <label className="flex items-center gap-2 font-semibold text-slate-700"><input type="checkbox" checked={symptomDetails.recent_injury} onChange={(e) => setSymptomDetails({ ...symptomDetails, recent_injury: e.target.checked })} /> Recent injury</label>
-              <label className="flex items-center gap-2 font-semibold text-slate-700"><input type="checkbox" checked={symptomDetails.recent_vaccination} onChange={(e) => setSymptomDetails({ ...symptomDetails, recent_vaccination: e.target.checked })} /> Recent vaccination</label>
-              <label className="flex items-center gap-2 font-semibold text-slate-700"><input type="checkbox" checked={symptomDetails.contact_sick_animals} onChange={(e) => setSymptomDetails({ ...symptomDetails, contact_sick_animals: e.target.checked })} /> Contact with sick animals</label>
-              <input
-                type="text"
-                placeholder="Other symptoms or notes"
-                value={symptomDetails.other}
-                onChange={(e) => setSymptomDetails({ ...symptomDetails, other: e.target.value })}
-                className="sm:col-span-2 lg:col-span-4 w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
+              <button
+                type="button"
+                onClick={stopCamera}
+                className="bg-slate-900/90 text-white font-bold px-4 py-2.5 rounded-xl text-xs hover:bg-slate-800"
+              >
+                Cancel
+              </button>
             </div>
           </div>
-
-          {/* Step 3: Check Symptoms */}
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">Step 3: Check Observed Clinical Signs</h2>
-                <p className="text-xs text-slate-500">Selected: {selectedSymptoms.size} symptoms</p>
+        ) : scanImage ? (
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+            <div className="md:col-span-6 relative rounded-2xl overflow-hidden bg-slate-950 aspect-video max-h-[300px] border-2 border-emerald-500 shadow-md group">
+              {isVideoMedia ? (
+                <video src={scanImage} controls autoPlay muted loop className="w-full h-full object-cover" />
+              ) : (
+                <img src={scanImage} alt="Analysis subject" className="w-full h-full object-cover" />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-3 pointer-events-none">
+                <span className="text-xs font-bold text-emerald-300 bg-black/60 px-3 py-1 rounded-lg backdrop-blur-sm">
+                  {isVideoMedia ? '🎥 Dynamic Video Loaded (Temporal AI Sampling)' : '✓ Photo Ready for AI Analysis'}
+                </span>
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedSymptoms(new Set())}
-                className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg"
+                onClick={() => {
+                  setScanImage(null);
+                  setSelectedFile(null);
+                  setMediaId(0);
+                }}
+                className="absolute top-3 right-3 w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center font-bold text-sm hover:bg-red-700 shadow z-10"
+                title="Remove media"
               >
-                Clear All ✕
+                ✕
               </button>
             </div>
 
-            <div className="space-y-4">
-              {symptomCategories.map(cat => (
-                <div key={cat.id} className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800 pb-2 mb-3 border-b border-slate-100">
-                    {cat.name}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    {cat.symptoms.map(sym => {
-                      const isChecked = selectedSymptoms.has(sym.id);
-                      return (
-                        <label
-                          key={sym.id}
-                          className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
-                            isChecked
-                              ? 'border-emerald-500 bg-emerald-50/80 font-semibold text-emerald-950'
-                              : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                          }`}
-                        >
-                          <div className="flex items-center space-x-3 pr-2">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => toggleSymptom(sym.id)}
-                              className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
-                            />
-                            <span className="text-xs select-none">{sym.name}</span>
-                          </div>
-                          {sym.severity === 'critical' ? (
-                            <span className="text-[10px] uppercase font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
-                              Emergency
-                            </span>
-                          ) : sym.severity === 'high' ? (
-                            <span className="text-[10px] uppercase font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                              Urgent
-                            </span>
-                          ) : null}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+            <div className="md:col-span-6 space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  Optional Observations / Clinical Notes:
+                </label>
+                <textarea
+                  rows="3"
+                  placeholder="Optional: Describe duration, behavioral changes, itching, diet, etc..."
+                  value={clinicalNotes}
+                  onChange={(e) => setClinicalNotes(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isAnalyzing || isUploading}
+                  onClick={handleSubmitAnalysis}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 px-6 rounded-2xl shadow-lg shadow-emerald-500/20 text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Analyzing Photo & Clinical Signs...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>⚡ Run AI Disease Analysis</span>
+                      <span>→</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-center"
+                >
+                  Select Another Photo
+                </button>
+              </div>
             </div>
           </div>
+        ) : (
+          <div
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-3xl p-10 sm:p-16 text-center cursor-pointer transition-all ${
+              dragActive
+                ? 'border-emerald-500 bg-emerald-50 scale-[1.01]'
+                : 'border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-slate-50/80'
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime,video/x-matroska"
+              onChange={handleFileInput}
+              className="hidden"
+            />
 
-          {/* Submit Prediction Button */}
-          <div className="pt-4 flex justify-end">
-            {(apiError || uploadError) && <p className="mr-auto text-xs font-semibold text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{apiError || uploadError}</p>}
+            <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto mb-4 text-3xl font-bold shadow-sm">
+              📸🎥
+            </div>
+            <h3 className="text-lg font-black text-slate-900">
+              Drag & Drop Animal Photo or Motion Video Here
+            </h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+              Upload clear photos or recorded videos to evaluate skin lesions, wounds, respiratory effort, and gait/twitching (e.g. Distemper, Ataxia, Colic).
+            </p>
+
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
+              <span className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-sm transition-colors">
+                Select Photo / Video from Device
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startCamera();
+                }}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm transition-colors"
+              >
+                📸 Camera Photo / 🔴 Record Video
+              </button>
+            </div>
+          </div>
+        )}
+
+        {cameraError && (
+          <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl p-3 text-center font-semibold">
+            {cameraError}
+          </p>
+        )}
+        {(apiError || uploadError) && (
+          <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl p-3 text-center font-semibold">
+            {apiError || uploadError}
+          </p>
+        )}
+
+        {/* Clinical Presets */}
+        <div className="pt-4 border-t border-slate-100">
+          <span className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-3">
+            Or Click a Disease Sample to Test:
+          </span>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <button
-              type="submit"
-              disabled={isAnalyzing}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm px-8 py-4 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 disabled:opacity-60"
+              type="button"
+              onClick={() => handlePresetSelect({
+                thumbnail: 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&auto=format&fit=crop&q=80',
+                title: 'Canine Parvovirus (CPV-2)',
+                area: 'Lethargy & bloody diarrhea'
+              })}
+              className="p-3 rounded-2xl bg-slate-50 hover:bg-white border border-slate-200 hover:border-emerald-500 hover:shadow-md text-left transition-all group flex flex-col justify-between"
             >
-              <span>{isAnalyzing ? 'Analyzing...' : '🔬 Analyze Symptoms & Calculate Differentials'}</span>
-              <span>→</span>
+              <div className="w-full h-24 rounded-xl overflow-hidden mb-2 bg-slate-200 flex items-center justify-center">
+                <img
+                  src="https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&auto=format&fit=crop&q=80"
+                  alt="Canine Parvovirus"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                />
+              </div>
+              <div>
+                <strong className="text-xs font-bold text-slate-900 block group-hover:text-emerald-700 truncate">
+                  Canine Parvovirus
+                </strong>
+                <span className="text-[11px] text-red-600 font-bold block truncate">
+                  Emergency Enteritis
+                </span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handlePresetSelect({
+                thumbnail: 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=400&auto=format&fit=crop&q=80',
+                title: 'Canine Distemper Virus (CDV)',
+                area: 'Oculonasal discharge & hard pad'
+              })}
+              className="p-3 rounded-2xl bg-slate-50 hover:bg-white border border-slate-200 hover:border-emerald-500 hover:shadow-md text-left transition-all group flex flex-col justify-between"
+            >
+              <div className="w-full h-24 rounded-xl overflow-hidden mb-2 bg-slate-200 flex items-center justify-center">
+                <img
+                  src="https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=400&auto=format&fit=crop&q=80"
+                  alt="Canine Distemper"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                />
+              </div>
+              <div>
+                <strong className="text-xs font-bold text-slate-900 block group-hover:text-emerald-700 truncate">
+                  Canine Distemper
+                </strong>
+                <span className="text-[11px] text-amber-600 font-bold block truncate">
+                  Systemic & Hard Pad
+                </span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handlePresetSelect({
+                thumbnail: 'https://images.unsplash.com/photo-1546445317-29f4545e9d53?w=400&auto=format&fit=crop&q=80',
+                title: 'Bovine Lumpy Skin Disease (LSD)',
+                area: 'Circumscribed cutaneous nodules'
+              })}
+              className="p-3 rounded-2xl bg-slate-50 hover:bg-white border border-slate-200 hover:border-emerald-500 hover:shadow-md text-left transition-all group flex flex-col justify-between"
+            >
+              <div className="w-full h-24 rounded-xl overflow-hidden mb-2 bg-slate-200 flex items-center justify-center">
+                <img
+                  src="https://images.unsplash.com/photo-1546445317-29f4545e9d53?w=400&auto=format&fit=crop&q=80"
+                  alt="Cattle Lumpy Skin"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                />
+              </div>
+              <div>
+                <strong className="text-xs font-bold text-slate-900 block group-hover:text-emerald-700 truncate">
+                  Cattle Lumpy Skin
+                </strong>
+                <span className="text-[11px] text-amber-600 font-bold block truncate">
+                  Capripoxvirus Nodules
+                </span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handlePresetSelect({
+                thumbnail: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&auto=format&fit=crop&q=80',
+                title: 'Feline Ringworm (Dermatophytosis)',
+                area: 'Circular focal alopecia'
+              })}
+              className="p-3 rounded-2xl bg-slate-50 hover:bg-white border border-slate-200 hover:border-emerald-500 hover:shadow-md text-left transition-all group flex flex-col justify-between"
+            >
+              <div className="w-full h-24 rounded-xl overflow-hidden mb-2 bg-slate-200 flex items-center justify-center">
+                <img
+                  src="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&auto=format&fit=crop&q=80"
+                  alt="Feline Ringworm"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                />
+              </div>
+              <div>
+                <strong className="text-xs font-bold text-slate-900 block group-hover:text-emerald-700 truncate">
+                  Feline Ringworm
+                </strong>
+                <span className="text-[11px] text-emerald-700 font-bold block truncate">
+                  Circular Alopecia
+                </span>
+              </div>
             </button>
           </div>
-
-        </form>
-      )}
-
-      {/* MODE 2: VISUAL AI SCANNER */}
-      {activeMode === 'scanner' && (
-        <div className="space-y-6">
-          
-          {/* Preset Sample Selector */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3">
-            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Click a Clinical Preset to Test:</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {scannerPresets.map(preset => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => handlePresetScan(preset)}
-                  className="p-3 rounded-2xl border border-slate-200 bg-white hover:border-emerald-500 hover:shadow-md transition-all text-left group flex flex-col justify-between"
-                >
-                  <div className="w-full h-24 rounded-xl overflow-hidden mb-2 bg-slate-100 flex items-center justify-center">
-                    <img src={preset.thumbnail} alt={preset.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-900 block group-hover:text-emerald-700">{preset.title}</span>
-                    <span className="text-[11px] text-slate-400">{preset.species} • {preset.area}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Scanner Viewport & Results Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            
-            {/* Viewport */}
-            <div className="lg:col-span-6 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">Image Analysis Viewport</h3>
-                <div className="flex flex-wrap gap-2 justify-end">
-                  <label className="cursor-pointer text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl transition-colors">
-                    <span>📤 Upload Image/Video</span>
-                    <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4" onChange={handleFileUpload} className="hidden" />
-                  </label>
-                  <button type="button" onClick={startCamera} className="text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-xl transition-colors">
-                    📷 Capture Image
-                  </button>
-                </div>
-              </div>
-
-              {(uploadError || cameraError || apiError) && (
-                <div className="text-xs font-semibold text-red-700 bg-red-50 border border-red-100 rounded-xl p-3">
-                  {uploadError || cameraError || apiError}
-                </div>
-              )}
-
-              <div className="scan-container relative w-full h-80 bg-slate-900 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-800">
-                {cameraOpen ? (
-                  <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain bg-black" />
-                ) : !scanImage ? (
-                  <div className="text-center p-6">
-                    <div className="text-5xl mb-2 opacity-50">📷</div>
-                    <p className="text-sm font-bold text-slate-300">No Image Loaded</p>
-                    <p className="text-xs text-slate-500 mt-1 max-w-xs">Select a preset, upload media, or capture a camera image to scan.</p>
-                  </div>
-                ) : (
-                  <>
-                    <img src={scanImage} alt="Scan preview" className="w-full h-full object-contain" />
-                    {isScanning && <div className="scan-laser-line"></div>}
-                    {!isScanning && <div className="detection-box w-36 h-36 top-1/4 left-1/3"></div>}
-                  </>
-                )}
-              </div>
-
-              {cameraOpen && (
-                <div className="flex justify-end gap-2">
-                  <button type="button" onClick={stopCamera} className="text-xs font-bold bg-slate-100 text-slate-700 px-4 py-2 rounded-xl">Cancel</button>
-                  <button type="button" onClick={captureImage} className="text-xs font-bold bg-emerald-600 text-white px-4 py-2 rounded-xl">Capture & Use</button>
-                </div>
-              )}
-
-              <div className="flex justify-between text-[11px] text-slate-400">
-                <span>Model: Qwen/Qwen2.5-VL-7B-Instruct via Go backend</span>
-                <span>{mediaFileName || 'Ready for inference'}</span>
-              </div>
-            </div>
-
-            {/* AI Findings Output */}
-            <div className="lg:col-span-6 space-y-4">
-              {isScanning ? (
-                <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center">
-                  <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mb-3"></div>
-                  <h4 className="text-sm font-bold text-slate-900">Neural Visual Analysis in Progress...</h4>
-                  <p className="text-xs text-slate-500 mt-1">Extracting morphological features, color histology & edge margins</p>
-                </div>
-              ) : scannerResult ? (
-                <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
-                  <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-                    <div>
-                      <span className="text-xs font-bold text-emerald-600 uppercase">Visual Classification Result</span>
-                      <h3 className="text-lg font-black text-slate-900">{scannerResult.detectedDisease}</h3>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-2xl font-black text-emerald-600">{scannerResult.confidence}%</span>
-                      <span className="block text-[10px] text-slate-400 font-bold">Confidence</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 text-xs">
-                    <div>
-                      <span className="text-slate-400 block font-semibold">Lesion Characteristics:</span>
-                      <span className="font-semibold text-slate-800">{scannerResult.lesionType}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block font-semibold">Severity Rating:</span>
-                      <span className="font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block">
-                        {scannerResult.severity}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block font-semibold">Confirmatory Lab Diagnostic:</span>
-                      <span className="font-semibold text-slate-800">{scannerResult.recommendedTest}</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-xs text-emerald-950">
-                    <strong className="block mb-1">Recommended Action Protocol:</strong>
-                    <p className="leading-relaxed">{scannerResult.actionPlan}</p>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-100 flex justify-between items-center">
-                    <button
-                      type="button"
-                      onClick={() => setActivePage('emergency')}
-                      className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-xl"
-                    >
-                      Find Emergency Vet →
-                    </button>
-                    <button
-                      type="button"
-                      onClick={runVisualAssessment}
-                      disabled={isAnalyzing}
-                      className="text-xs font-bold text-emerald-600 hover:underline disabled:opacity-60"
-                    >
-                      {isAnalyzing ? 'Running assessment...' : 'Run Full AI Health Assessment →'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-12 text-center text-slate-400 text-xs">
-                  <div className="text-4xl mb-2">🔬</div>
-                  Select a clinical preset above or upload a photo to view AI classification.
-                </div>
-              )}
-            </div>
-
-          </div>
-
         </div>
-      )}
+
+      </div>
+
+      {/* Pipeline Explanation Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1.5">
+          <div className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-xs">1</span>
+            <span>Visual Recognition</span>
+          </div>
+          <p className="text-slate-500 leading-relaxed">
+            Identifies animal species and extracts detailed anatomical structures and visible lesions.
+          </p>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1.5">
+          <div className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center font-black text-xs">2</span>
+            <span>Differential Reasoning</span>
+          </div>
+          <p className="text-slate-500 leading-relaxed">
+            Evaluates acute, infectious, systemic, and dermatological pathologies across veterinary medicine.
+          </p>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1.5">
+          <div className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-lg bg-purple-100 text-purple-800 flex items-center justify-center font-black text-xs">3</span>
+            <span>Clinical Protocols</span>
+          </div>
+          <p className="text-slate-500 leading-relaxed">
+            Provides emergency triage ranking, recommended diagnostic laboratory tests, and supportive care.
+          </p>
+        </div>
+      </div>
 
     </div>
   );

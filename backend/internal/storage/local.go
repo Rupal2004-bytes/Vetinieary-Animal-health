@@ -19,10 +19,13 @@ import (
 const MaxMediaBytes int64 = 25 << 20
 
 var allowedMIMEs = map[string]string{
-	"image/jpeg": ".jpg",
-	"image/png":  ".png",
-	"image/webp": ".webp",
-	"video/mp4":  ".mp4",
+	"image/jpeg":      ".jpg",
+	"image/png":       ".png",
+	"image/webp":      ".webp",
+	"video/mp4":       ".mp4",
+	"video/webm":      ".webm",
+	"video/quicktime": ".mov",
+	"video/x-matroska": ".mkv",
 }
 
 type Store interface {
@@ -51,13 +54,23 @@ func (s *LocalStore) Save(ctx context.Context, file multipart.File, header *mult
 		_, _ = seeker.Seek(0, io.SeekStart)
 	}
 	mimeType := http.DetectContentType(head[:n])
+	origExt := strings.ToLower(filepath.Ext(header.Filename))
+	
 	ext, ok := allowedMIMEs[mimeType]
 	if !ok {
-		return models.Media{}, ErrUnsupportedMedia
-	}
-	origExt := strings.ToLower(filepath.Ext(header.Filename))
-	if origExt != ext && !(mimeType == "image/jpeg" && (origExt == ".jpeg" || origExt == ".jpg")) {
-		return models.Media{}, ErrUnsupportedMedia
+		// Fallback for browser-recorded WebM / MP4 where DetectContentType might report octet-stream or video/mp4
+		if origExt == ".webm" {
+			ext = ".webm"
+			mimeType = "video/webm"
+		} else if origExt == ".mp4" {
+			ext = ".mp4"
+			mimeType = "video/mp4"
+		} else if origExt == ".mov" {
+			ext = ".mov"
+			mimeType = "video/quicktime"
+		} else {
+			return models.Media{}, ErrUnsupportedMedia
+		}
 	}
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
 		return models.Media{}, err

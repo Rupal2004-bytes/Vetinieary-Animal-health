@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { loginAccount } from '../api/client.js';
 
 export default function Login({ setActivePage, onAuthSuccess }) {
-  const [email, setEmail] = useState('vet.doctor@agricare.org');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('veterinarian');
+  const [role, setRole] = useState('owner');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -65,6 +65,7 @@ export default function Login({ setActivePage, onAuthSuccess }) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            placeholder="name@example.com"
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
           />
         </div>

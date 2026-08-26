@@ -2,12 +2,9 @@ package database
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -17,23 +14,28 @@ import (
 
 type DB struct {
 	*sql.DB
+	Path     string
+	OnChange func(dbPath string)
+}
+
+func (db *DB) notifyChange() {
+	if db != nil && db.OnChange != nil && db.Path != "" {
+		db.OnChange(db.Path)
+	}
 }
 
 func Open(path string) (*DB, error) {
-	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on")
+	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=10000")
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec(`PRAGMA foreign_keys = ON;`); err != nil {
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 10000;`); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
-	wrapped := &DB{DB: db}
+	wrapped := &DB{DB: db, Path: path}
 	if err := wrapped.Migrate(context.Background()); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if err := wrapped.EnsureDemoUser(context.Background()); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -41,16 +43,11 @@ func Open(path string) (*DB, error) {
 }
 
 func (db *DB) Migrate(ctx context.Context) error {
-	_, err := db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL UNIQUE,
-  role TEXT NOT NULL DEFAULT 'owner',
-  hf_connected INTEGER NOT NULL DEFAULT 0,
-  password_hash TEXT NOT NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+	migrations := []Migration{
+		{
+			Version: 1,
+			Name:    "create_animals_media_screenings_reminders_tables",
+			Up: `
 CREATE TABLE IF NOT EXISTS animals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
@@ -62,9 +59,9 @@ CREATE TABLE IF NOT EXISTS animals (
   photo_url TEXT,
   notes TEXT,
   weight TEXT,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
 CREATE TABLE IF NOT EXISTS media (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   url TEXT NOT NULL,
@@ -74,6 +71,7 @@ CREATE TABLE IF NOT EXISTS media (
   size INTEGER NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
 CREATE TABLE IF NOT EXISTS health_screenings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   animal_id INTEGER NOT NULL,
@@ -83,9 +81,9 @@ CREATE TABLE IF NOT EXISTS health_screenings (
   visual_analysis_json TEXT NOT NULL,
   assessment_json TEXT NOT NULL,
   urgency TEXT NOT NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY(animal_id) REFERENCES animals(id) ON DELETE CASCADE
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
 CREATE TABLE IF NOT EXISTS reminders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
@@ -95,74 +93,25 @@ CREATE TABLE IF NOT EXISTS reminders (
   description TEXT,
   due_at DATETIME NOT NULL,
   completed INTEGER NOT NULL DEFAULT 0,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY(animal_id) REFERENCES animals(id) ON DELETE SET NULL
-);`)
-	if err != nil {
-		return err
-	}
-	_, _ = db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'owner'`)
-	_, _ = db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN hf_connected INTEGER NOT NULL DEFAULT 0`)
-	return nil
-}
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
-func (db *DB) EnsureDemoUser(ctx context.Context) error {
-	_, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO users (id, name, email, role, password_hash) VALUES (1, 'Demo User', 'demo@animalhealth.ai', 'veterinarian', ?)`, hashPassword("demo-password"))
-	return err
-}
+CREATE INDEX IF NOT EXISTS idx_animals_user_id ON animals(user_id);
+CREATE INDEX IF NOT EXISTS idx_health_screenings_animal_id ON health_screenings(animal_id);
+CREATE INDEX IF NOT EXISTS idx_reminders_user_id ON reminders(user_id);
+`,
+		},
+		{
+			Version: 2,
+			Name:    "add_screening_urgency_and_created_at_indexes",
+			Up: `
+CREATE INDEX IF NOT EXISTS idx_health_screenings_urgency ON health_screenings(urgency);
+CREATE INDEX IF NOT EXISTS idx_health_screenings_created_at ON health_screenings(created_at);
+`,
+		},
+	}
 
-func (db *DB) CreateUser(ctx context.Context, u models.User, password string) (models.User, error) {
-	u.Name = strings.TrimSpace(u.Name)
-	u.Email = strings.ToLower(strings.TrimSpace(u.Email))
-	u.Role = strings.TrimSpace(u.Role)
-	if u.Role == "" {
-		u.Role = "owner"
-	}
-	if u.Name == "" || u.Email == "" || strings.TrimSpace(password) == "" {
-		return models.User{}, errors.New("name, email, and password are required")
-	}
-	res, err := db.ExecContext(ctx, `INSERT INTO users (name,email,role,password_hash) VALUES (?,?,?,?)`, u.Name, u.Email, u.Role, hashPassword(password))
-	if err != nil {
-		return models.User{}, err
-	}
-	u.ID, _ = res.LastInsertId()
-	return db.GetUser(ctx, u.ID)
-}
-
-func (db *DB) AuthenticateUser(ctx context.Context, email, password, role string) (models.User, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
-	row := db.QueryRowContext(ctx, `SELECT id,name,email,role,hf_connected,password_hash,created_at FROM users WHERE email=?`, email)
-	var u models.User
-	var hfConnected int
-	if err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &hfConnected, &u.PasswordHash, &u.CreatedAt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return db.CreateUser(ctx, models.User{Name: displayNameFromEmail(email), Email: email, Role: role}, password)
-		}
-		return models.User{}, err
-	}
-	if u.PasswordHash != hashPassword(password) {
-		return models.User{}, sql.ErrNoRows
-	}
-	u.HFConnected = hfConnected == 1
-	return u, nil
-}
-
-func (db *DB) GetUser(ctx context.Context, id int64) (models.User, error) {
-	var u models.User
-	var hfConnected int
-	err := db.QueryRowContext(ctx, `SELECT id,name,email,role,hf_connected,password_hash,created_at FROM users WHERE id=?`, id).
-		Scan(&u.ID, &u.Name, &u.Email, &u.Role, &hfConnected, &u.PasswordHash, &u.CreatedAt)
-	u.HFConnected = hfConnected == 1
-	return u, err
-}
-
-func (db *DB) SetHuggingFaceConnected(ctx context.Context, userID int64, connected bool) (models.User, error) {
-	_, err := db.ExecContext(ctx, `UPDATE users SET hf_connected=? WHERE id=?`, boolInt(connected), userID)
-	if err != nil {
-		return models.User{}, err
-	}
-	return db.GetUser(ctx, userID)
+	return RunMigrations(ctx, db.DB, migrations)
 }
 
 func (db *DB) ListAnimals(ctx context.Context) ([]models.Animal, error) {
@@ -171,7 +120,7 @@ func (db *DB) ListAnimals(ctx context.Context) ([]models.Animal, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.Animal
+	out := make([]models.Animal, 0)
 	for rows.Next() {
 		var a models.Animal
 		if err := rows.Scan(&a.ID, &a.UserID, &a.Name, &a.Species, &a.Breed, &a.Age, &a.Sex, &a.PhotoURL, &a.Notes, &a.Weight, &a.CreatedAt); err != nil {
@@ -192,6 +141,7 @@ func (db *DB) CreateAnimal(ctx context.Context, a models.Animal) (models.Animal,
 		return models.Animal{}, err
 	}
 	a.ID, _ = res.LastInsertId()
+	db.notifyChange()
 	return db.GetAnimal(ctx, a.ID)
 }
 
@@ -209,6 +159,7 @@ func (db *DB) SaveMedia(ctx context.Context, m models.Media) (models.Media, erro
 	}
 	m.ID, _ = res.LastInsertId()
 	m.CreatedAt = time.Now()
+	db.notifyChange()
 	return m, nil
 }
 
@@ -220,6 +171,20 @@ func (db *DB) GetMedia(ctx context.Context, id int64) (models.Media, error) {
 }
 
 func (db *DB) CreateScreening(ctx context.Context, s models.HealthScreening) (models.HealthScreening, error) {
+	if s.AnimalID == 0 {
+		species := "Animal"
+		if s.VisualAnalysis.Animal != "" {
+			species = s.VisualAnalysis.Animal
+		}
+		animal, err := db.CreateAnimal(ctx, models.Animal{
+			UserID:  1,
+			Name:    "Patient",
+			Species: species,
+		})
+		if err == nil {
+			s.AnimalID = animal.ID
+		}
+	}
 	sym, _ := json.Marshal(s.Symptoms)
 	vis, _ := json.Marshal(s.VisualAnalysis)
 	assess, _ := json.Marshal(s.Assessment)
@@ -229,6 +194,7 @@ func (db *DB) CreateScreening(ctx context.Context, s models.HealthScreening) (mo
 		return models.HealthScreening{}, err
 	}
 	s.ID, _ = res.LastInsertId()
+	db.notifyChange()
 	return db.GetScreening(ctx, s.ID)
 }
 
@@ -258,7 +224,7 @@ func (db *DB) ListScreenings(ctx context.Context, animalID int64) ([]models.Heal
 }
 
 func scanScreenings(rows *sql.Rows) ([]models.HealthScreening, error) {
-	var out []models.HealthScreening
+	out := make([]models.HealthScreening, 0)
 	for rows.Next() {
 		var s models.HealthScreening
 		var symptomsJSON, visualJSON, assessmentJSON string
@@ -292,6 +258,7 @@ func (db *DB) CreateReminder(ctx context.Context, r models.Reminder) (models.Rem
 		return models.Reminder{}, err
 	}
 	r.ID, _ = res.LastInsertId()
+	db.notifyChange()
 	return r, nil
 }
 
@@ -301,7 +268,7 @@ func (db *DB) ListReminders(ctx context.Context) ([]models.Reminder, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.Reminder
+	out := make([]models.Reminder, 0)
 	for rows.Next() {
 		var r models.Reminder
 		var completed int
@@ -326,17 +293,4 @@ func boolInt(v bool) int {
 		return 1
 	}
 	return 0
-}
-
-func hashPassword(password string) string {
-	sum := sha256.Sum256([]byte(password))
-	return hex.EncodeToString(sum[:])
-}
-
-func displayNameFromEmail(email string) string {
-	local := strings.TrimSpace(strings.Split(email, "@")[0])
-	if local == "" {
-		return "VetScan User"
-	}
-	return strings.ReplaceAll(local, ".", " ")
 }

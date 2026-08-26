@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 
-export default function History({ historyList, onSelectHistoryItem, setActivePage }) {
+export default function History({ historyList = [], onSelectHistoryItem, setActivePage }) {
   const [filterSpecies, setFilterSpecies] = useState('all');
+  const safeHistory = Array.isArray(historyList) ? historyList : [];
 
-  const filteredHistory = historyList.filter(item => {
-    return filterSpecies === 'all' || item.species.toLowerCase().includes(filterSpecies.toLowerCase());
+  const filteredHistory = safeHistory.filter(item => {
+    if (!item) return false;
+    const sp = String(item.species || '').toLowerCase();
+    return filterSpecies === 'all' || sp.includes(filterSpecies.toLowerCase());
   });
 
   return (
