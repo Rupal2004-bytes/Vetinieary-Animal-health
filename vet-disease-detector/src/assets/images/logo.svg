@@ -1,7 +1,7 @@
-<!-- VetScan AI Logo -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
+<!-- VetMyPet AI Logo -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 60" width="220" height="60">
   <rect x="5" y="5" width="50" height="50" rx="14" fill="#059669"/>
   <text x="30" y="38" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="white" text-anchor="middle">🐾</text>
-  <text x="68" y="38" font-family="Arial, sans-serif" font-size="26" font-weight="900" fill="#0f172a">VetScan</text>
-  <text x="175" y="24" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#059669">AI 3.0</text>
+  <text x="68" y="38" font-family="Arial, sans-serif" font-size="24" font-weight="900" fill="#0f172a">VetMyPet</text>
+  <text x="185" y="24" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#059669">AI 2.0</text>
 </svg>

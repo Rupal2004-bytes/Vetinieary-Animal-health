@@ -292,7 +292,11 @@ func (h *Handler) connectHuggingFace(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) animals(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		animals, err := h.DB.ListAnimals(r.Context())
+		userID := int64(0)
+		if user, ok := h.userFromRequest(r); ok {
+			userID = user.ID
+		}
+		animals, err := h.DB.ListAnimals(r.Context(), userID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "database_error", "Could not load animals.")
 			return
@@ -313,7 +317,8 @@ func (h *Handler) animals(w http.ResponseWriter, r *http.Request) {
 		}
 		created, err := h.DB.CreateAnimal(r.Context(), a)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "database_error", "Could not save animal.")
+			log.Printf("CreateAnimal DB error: %v", err)
+			writeError(w, http.StatusInternalServerError, "database_error", "Could not save animal: "+err.Error())
 			return
 		}
 		writeJSON(w, http.StatusCreated, created)
@@ -344,7 +349,11 @@ func (h *Handler) animalSubroutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 2 && parts[1] == "history" && r.Method == http.MethodGet {
-		history, err := h.DB.ListScreenings(r.Context(), id)
+		userID := int64(0)
+		if user, ok := h.userFromRequest(r); ok {
+			userID = user.ID
+		}
+		history, err := h.DB.ListScreenings(r.Context(), userID, id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "database_error", "Could not load health history.")
 			return
@@ -540,7 +549,11 @@ func (h *Handler) nearbyClinics(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) reminders(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		remindersList, err := h.DB.ListReminders(r.Context())
+		userID := int64(0)
+		if user, ok := h.userFromRequest(r); ok {
+			userID = user.ID
+		}
+		remindersList, err := h.DB.ListReminders(r.Context(), userID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "database_error", "Could not load reminders.")
 			return
@@ -603,6 +616,9 @@ func bearerToken(r *http.Request) string {
 }
 
 func extractToken(r *http.Request) string {
+	if tok := strings.TrimSpace(r.Header.Get("X-Auth-Token")); tok != "" {
+		return tok
+	}
 	auth := strings.TrimSpace(r.Header.Get("Authorization"))
 	if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
 		token := strings.TrimSpace(auth[7:])
@@ -610,19 +626,26 @@ func extractToken(r *http.Request) string {
 			return token
 		}
 	}
-	if tok := strings.TrimSpace(r.Header.Get("X-Auth-Token")); tok != "" {
-		return tok
-	}
 	return strings.TrimSpace(r.Header.Get("X-User-ID"))
 }
 
 func (h *Handler) userFromRequest(r *http.Request) (models.User, bool) {
-	token := extractToken(r)
-	if token != "" {
-		if user, err := h.UserDB.GetUserByToken(r.Context(), token); err == nil {
+	if tok := strings.TrimSpace(r.Header.Get("X-Auth-Token")); tok != "" {
+		if user, err := h.UserDB.GetUserByToken(r.Context(), tok); err == nil {
 			return user, true
 		}
-		if id, err := strconv.ParseInt(token, 10, 64); err == nil && id > 0 {
+	}
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+		token := strings.TrimSpace(auth[7:])
+		if !strings.HasPrefix(token, "hf_") {
+			if user, err := h.UserDB.GetUserByToken(r.Context(), token); err == nil {
+				return user, true
+			}
+		}
+	}
+	if uidStr := strings.TrimSpace(r.Header.Get("X-User-ID")); uidStr != "" {
+		if id, err := strconv.ParseInt(uidStr, 10, 64); err == nil && id > 0 {
 			if user, err := h.UserDB.GetUserByID(r.Context(), id); err == nil {
 				return user, true
 			}

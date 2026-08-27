@@ -32,7 +32,7 @@ export default function Navbar({ activePage, setActivePage, user, setUser, onLog
             </div>
             <div>
               <div className="flex items-center space-x-1.5">
-                <span className="text-lg font-black tracking-tight text-slate-900">VetScan</span>
+                <span className="text-lg font-black tracking-tight text-slate-900">VetMyPet</span>
                 <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">AI 2.0</span>
               </div>
               <p className="text-[11px] text-slate-400 font-medium">Multimodal Veterinary Triage</p>

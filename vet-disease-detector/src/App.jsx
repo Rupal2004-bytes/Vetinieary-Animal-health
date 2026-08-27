@@ -34,7 +34,7 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('VetScan Render Error:', error, errorInfo);
+    console.error('VetMyPet Render Error:', error, errorInfo);
   }
 
   render() {
@@ -87,8 +87,13 @@ export default function App({ initialData }) {
     toxicityAlerts = []
   } = initialData || {};
 
-  const [activePage, setActivePage] = useState('home');
-  const [user, setUser] = useState(null);
+  const getInitialPage = () => {
+    const hash = window.location.hash.replace('#', '').trim();
+    return hash || 'home';
+  };
+
+  const [activePage, setActivePage] = useState(getInitialPage);
+  const [user, setUser] = useState(() => getStoredUser());
   const [selectedSpecies, setSelectedSpecies] = useState('dog');
   const [activeResult, setActiveResult] = useState(null);
   const [selectedDiseaseModal, setSelectedDiseaseModal] = useState(null);
@@ -99,9 +104,40 @@ export default function App({ initialData }) {
   // Stored prediction history
   const [historyList, setHistoryList] = useState([]);
 
+  // Browser History & Touchpad Gesture Support (Prevents browser closing on back swipe)
+  useEffect(() => {
+    const handlePopState = (event) => {
+      const targetPage = event.state?.page || window.location.hash.replace('#', '').trim() || 'home';
+      setActivePage(targetPage);
+      if (event.state?.activeResult) {
+        setActiveResult(event.state.activeResult);
+      }
+    };
+
+    // Ensure initial entry is pushed to history stack
+    const initialPage = window.location.hash.replace('#', '').trim() || 'home';
+    if (!window.history.state || window.history.state.page !== initialPage) {
+      window.history.replaceState({ page: initialPage }, '', '#' + initialPage);
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateTo = (newPage, extraState = {}) => {
+    if (newPage === activePage && window.location.hash === '#' + newPage) return;
+    try {
+      window.history.pushState({ page: newPage, ...extraState }, '', '#' + newPage);
+    } catch {
+      // fallback
+    }
+    setActivePage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   useEffect(() => {
     refreshBackendState();
-  }, []);
+  }, [user?.id]);
 
   const refreshBackendState = async () => {
     try {
@@ -110,12 +146,15 @@ export default function App({ initialData }) {
         getHealthHistory()
       ]);
       setAnimals(Array.isArray(animalRows) ? animalRows : []);
-      if (Array.isArray(screeningRows) && screeningRows.length > 0) {
+      if (Array.isArray(screeningRows)) {
         setHistoryList(screeningRows.map(screeningToHistory));
+      } else {
+        setHistoryList([]);
       }
       setApiError('');
     } catch (error) {
       setAnimals([]);
+      setHistoryList([]);
       setApiError('');
     }
   };
@@ -147,7 +186,7 @@ export default function App({ initialData }) {
       setActiveResult(result);
       setHistoryList(prev => [screeningToHistory(screening, patient), ...((prev || []).filter(h => h.id !== `screening_${screening.id}`))]);
       refreshBackendState();
-      setActivePage('result');
+      navigateTo('result', { activeResult: result });
     } catch (error) {
       console.error('Online AI Analysis Error:', error);
       setApiError(error.message || 'Online health analysis failed. Please ensure the backend server is running and Hugging Face API key is valid.');
@@ -161,20 +200,25 @@ export default function App({ initialData }) {
     if (auth && auth.user) {
       setUser(auth.user);
     }
-    setActivePage('dashboard');
+    refreshBackendState();
+    navigateTo('dashboard');
   };
 
   const handleLogout = () => {
     clearStoredAuth();
     setUser(null);
-    setActivePage('login');
+    setAnimals([]);
+    setHistoryList([]);
+    setActiveResult(null);
+    navigateTo('login');
   };
 
   const handleSelectHistoryItem = (historyItem) => {
+    let resultObj = null;
     if (historyItem.fullResult) {
-      setActiveResult(historyItem.fullResult);
+      resultObj = historyItem.fullResult;
     } else {
-      setActiveResult({
+      resultObj = {
         patient: { name: historyItem.patientName, species: historyItem.species || 'Animal', breed: historyItem.breed },
         symptoms: historyItem.symptoms,
         evaluatedAt: historyItem.date,
@@ -198,9 +242,10 @@ export default function App({ initialData }) {
             matchedSymptoms: historyItem.symptoms
           }
         ]
-      });
+      };
     }
-    setActivePage('result');
+    setActiveResult(resultObj);
+    navigateTo('result', { activeResult: resultObj });
   };
 
   return (
@@ -210,7 +255,7 @@ export default function App({ initialData }) {
         {/* Navigation */}
         <Navbar
           activePage={activePage}
-          setActivePage={setActivePage}
+          setActivePage={navigateTo}
           user={user}
           setUser={setUser}
           onLogout={handleLogout}
@@ -220,7 +265,7 @@ export default function App({ initialData }) {
         <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {activePage === 'home' && (
             <Home
-              setActivePage={setActivePage}
+              setActivePage={navigateTo}
               onRunPrediction={handleRunPrediction}
               scannerPresets={scannerPresets}
               isAnalyzing={isAnalyzing}
@@ -230,14 +275,14 @@ export default function App({ initialData }) {
 
           {activePage === 'login' && (
             <Login
-              setActivePage={setActivePage}
+              setActivePage={navigateTo}
               onAuthSuccess={handleAuthSuccess}
             />
           )}
 
           {activePage === 'signup' && (
             <Signup
-              setActivePage={setActivePage}
+              setActivePage={navigateTo}
               onAuthSuccess={handleAuthSuccess}
               setUser={setUser}
             />
@@ -245,7 +290,7 @@ export default function App({ initialData }) {
 
           {activePage === 'dashboard' && (
             <Dashboard
-              setActivePage={setActivePage}
+              setActivePage={navigateTo}
               user={user}
               historyList={historyList}
               onSelectHistoryItem={handleSelectHistoryItem}
@@ -259,7 +304,7 @@ export default function App({ initialData }) {
               speciesList={speciesList}
               selectedSpecies={selectedSpecies}
               setSelectedSpecies={setSelectedSpecies}
-              setActivePage={setActivePage}
+              setActivePage={navigateTo}
             />
           )}
 
@@ -267,7 +312,7 @@ export default function App({ initialData }) {
             <Prediction
               scannerPresets={scannerPresets}
               onRunPrediction={handleRunPrediction}
-              setActivePage={setActivePage}
+              setActivePage={navigateTo}
               apiError={apiError}
               isAnalyzing={isAnalyzing}
             />
@@ -276,7 +321,7 @@ export default function App({ initialData }) {
           {activePage === 'result' && (
             <Result
               activeResult={activeResult}
-              setActivePage={setActivePage}
+              setActivePage={navigateTo}
               onOpenDiseaseModal={(d) => setSelectedDiseaseModal(d)}
             />
           )}
@@ -293,19 +338,19 @@ export default function App({ initialData }) {
             <History
               historyList={historyList}
               onSelectHistoryItem={handleSelectHistoryItem}
-              setActivePage={setActivePage}
+              setActivePage={navigateTo}
             />
           )}
 
           {activePage === 'emergency' && (
             <Emergency
-              setActivePage={setActivePage}
+              setActivePage={navigateTo}
             />
           )}
 
           {activePage === 'about' && (
             <About
-              setActivePage={setActivePage}
+              setActivePage={navigateTo}
             />
           )}
 

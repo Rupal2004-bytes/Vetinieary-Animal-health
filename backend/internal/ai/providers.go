@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -433,10 +434,11 @@ func (p MockVeterinaryProvider) Assess(ctx context.Context, input models.Clinica
 }
 
 type HuggingFaceProvider struct {
-	Token           string
-	VisionModel     string
-	VeterinaryModel string
-	Client          *http.Client
+	Token                 string
+	VisionModel           string
+	VeterinaryModel       string
+	VeterinaryEndpointURL string
+	Client                *http.Client
 }
 
 func (p HuggingFaceProvider) AnalyzeMedia(ctx context.Context, media models.Media, animal models.Animal, symptoms models.SymptomInput) (models.VisualAnalysis, error) {
@@ -589,6 +591,12 @@ func (p HuggingFaceProvider) chat(ctx context.Context, model string, messages []
 	if client == nil {
 		client = &http.Client{Timeout: 90 * time.Second}
 	}
+
+	endpoint := "https://router.huggingface.co/v1/chat/completions"
+	if p.VeterinaryEndpointURL != "" && model == p.VeterinaryModel {
+		endpoint = p.VeterinaryEndpointURL
+	}
+
 	body, err := json.Marshal(map[string]any{
 		"model":           model,
 		"messages":        messages,
@@ -600,7 +608,7 @@ func (p HuggingFaceProvider) chat(ctx context.Context, model string, messages []
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://router.huggingface.co/v1/chat/completions", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -623,6 +631,12 @@ func (p HuggingFaceProvider) chat(ctx context.Context, model string, messages []
 		return "", fmt.Errorf("failed to decode AI response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		errMsg := fmt.Sprintf("%v", decoded.Error)
+		// If custom/gated model is not hosted on HF serverless shared router, fallback to general reasoning model
+		if strings.Contains(errMsg, "model_not_supported") && model != "Qwen/Qwen2.5-72B-Instruct" {
+			log.Printf("[AI Notice] Model %s is not enabled on serverless shared router. Falling back to Qwen/Qwen2.5-72B-Instruct for clinical reasoning.", model)
+			return p.chat(ctx, "Qwen/Qwen2.5-72B-Instruct", messages)
+		}
 		return "", fmt.Errorf("AI inference request failed (HTTP %d): %v", resp.StatusCode, decoded.Error)
 	}
 	if len(decoded.Choices) == 0 {

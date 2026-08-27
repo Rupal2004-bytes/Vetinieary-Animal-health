@@ -36,7 +36,7 @@ export default function History({ historyList = [], onSelectHistoryItem, setActi
           </select>
 
           <button
-            onClick={() => setActivePage('prediction')}
+            onClick={() => setActivePage('home')}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors"
           >
             + New Scan
@@ -48,7 +48,7 @@ export default function History({ historyList = [], onSelectHistoryItem, setActi
         <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-12 text-center text-xs text-slate-400 space-y-3">
           <div className="text-4xl">🕒</div>
           <h3 className="text-sm font-bold text-slate-700">No Past Records Found</h3>
-          <p>Run predictions in the AI Prediction module to store and review triage records.</p>
+          <p>Run scans in the AI Scanner tab to store and review triage records.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

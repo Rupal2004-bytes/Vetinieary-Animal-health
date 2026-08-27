@@ -22,12 +22,12 @@ export default function Result({
       <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center max-w-lg mx-auto my-12 space-y-4">
         <div className="text-5xl">🩺</div>
         <h2 className="text-xl font-bold text-slate-900">No Active Diagnosis Results</h2>
-        <p className="text-xs text-slate-500">Run a new prediction check from the AI Prediction portal to see differential matches.</p>
+        <p className="text-xs text-slate-500">Run a new prediction check from the AI Scanner to see differential matches.</p>
         <button
-          onClick={() => setActivePage('prediction')}
+          onClick={() => setActivePage('home')}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md"
         >
-          Go to AI Prediction →
+          Go to AI Scanner →
         </button>
       </div>
     );
@@ -281,7 +281,7 @@ export default function Result({
       {/* Printable Report Hidden Layout */}
       <div id="printableReportArea" className="hidden">
         <div style={{ fontFamily: 'Arial, sans-serif', padding: '20px' }}>
-          <h1 style={{ color: '#065f46', fontSize: '24px', margin: 0 }}>VetScan AI - Veterinary Triage Summary</h1>
+          <h1 style={{ color: '#065f46', fontSize: '24px', margin: 0 }}>VetMyPet - Veterinary Triage Summary</h1>
           <p style={{ color: '#64748b', fontSize: '12px' }}>Generated: {evaluatedAt}</p>
           <hr style={{ margin: '15px 0' }} />
           <h3>Patient: {patient?.name} ({patient?.species?.toUpperCase()} - {patient?.breed})</h3>

@@ -109,13 +109,59 @@ CREATE INDEX IF NOT EXISTS idx_health_screenings_urgency ON health_screenings(ur
 CREATE INDEX IF NOT EXISTS idx_health_screenings_created_at ON health_screenings(created_at);
 `,
 		},
+		{
+			Version: 3,
+			Name:    "remove_cross_db_users_fk_constraint",
+			Up: `
+CREATE TABLE IF NOT EXISTS animals_v3 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  species TEXT NOT NULL,
+  breed TEXT,
+  age TEXT,
+  sex TEXT,
+  photo_url TEXT,
+  notes TEXT,
+  weight TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO animals_v3 (id, user_id, name, species, breed, age, sex, photo_url, notes, weight, created_at)
+SELECT id, user_id, name, species, COALESCE(breed,''), COALESCE(age,''), COALESCE(sex,''), COALESCE(photo_url,''), COALESCE(notes,''), COALESCE(weight,''), created_at FROM animals;
+
+DROP TABLE animals;
+ALTER TABLE animals_v3 RENAME TO animals;
+
+CREATE TABLE IF NOT EXISTS reminders_v3 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  animal_id INTEGER,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  due_at DATETIME NOT NULL,
+  completed INTEGER NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO reminders_v3 (id, user_id, animal_id, type, title, description, due_at, completed, created_at)
+SELECT id, user_id, animal_id, type, title, COALESCE(description,''), due_at, completed, created_at FROM reminders;
+
+DROP TABLE reminders;
+ALTER TABLE reminders_v3 RENAME TO reminders;
+
+CREATE INDEX IF NOT EXISTS idx_animals_user_id ON animals(user_id);
+CREATE INDEX IF NOT EXISTS idx_reminders_user_id ON reminders(user_id);
+`,
+		},
 	}
 
 	return RunMigrations(ctx, db.DB, migrations)
 }
 
-func (db *DB) ListAnimals(ctx context.Context) ([]models.Animal, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id,user_id,name,species,COALESCE(breed,''),COALESCE(age,''),COALESCE(sex,''),COALESCE(photo_url,''),COALESCE(notes,''),COALESCE(weight,''),created_at FROM animals ORDER BY created_at DESC`)
+func (db *DB) ListAnimals(ctx context.Context, userID int64) ([]models.Animal, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id,user_id,name,species,COALESCE(breed,''),COALESCE(age,''),COALESCE(sex,''),COALESCE(photo_url,''),COALESCE(notes,''),COALESCE(weight,''),created_at FROM animals WHERE (?=0 OR user_id=?) ORDER BY created_at DESC`, userID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -214,8 +260,14 @@ func (db *DB) GetScreening(ctx context.Context, id int64) (models.HealthScreenin
 	return ss[0], nil
 }
 
-func (db *DB) ListScreenings(ctx context.Context, animalID int64) ([]models.HealthScreening, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id,animal_id,COALESCE(media_url,''),COALESCE(media_type,''),symptoms_json,visual_analysis_json,assessment_json,urgency,created_at FROM health_screenings WHERE (?=0 OR animal_id=?) ORDER BY created_at DESC`, animalID, animalID)
+func (db *DB) ListScreenings(ctx context.Context, userID int64, animalID int64) ([]models.HealthScreening, error) {
+	query := `SELECT hs.id, hs.animal_id, COALESCE(hs.media_url,''), COALESCE(hs.media_type,''), 
+	                 hs.symptoms_json, hs.visual_analysis_json, hs.assessment_json, hs.urgency, hs.created_at 
+	          FROM health_screenings hs
+	          JOIN animals a ON hs.animal_id = a.id
+	          WHERE (?=0 OR a.user_id=?) AND (?=0 OR hs.animal_id=?)
+	          ORDER BY hs.created_at DESC`
+	rows, err := db.QueryContext(ctx, query, userID, userID, animalID, animalID)
 	if err != nil {
 		return nil, err
 	}
@@ -262,8 +314,8 @@ func (db *DB) CreateReminder(ctx context.Context, r models.Reminder) (models.Rem
 	return r, nil
 }
 
-func (db *DB) ListReminders(ctx context.Context) ([]models.Reminder, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id,user_id,COALESCE(animal_id,0),type,title,COALESCE(description,''),due_at,completed,created_at FROM reminders ORDER BY due_at ASC`)
+func (db *DB) ListReminders(ctx context.Context, userID int64) ([]models.Reminder, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id,user_id,COALESCE(animal_id,0),type,title,COALESCE(description,''),due_at,completed,created_at FROM reminders WHERE (?=0 OR user_id=?) ORDER BY due_at ASC`, userID, userID)
 	if err != nil {
 		return nil, err
 	}

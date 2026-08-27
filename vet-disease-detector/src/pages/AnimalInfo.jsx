@@ -21,7 +21,7 @@ export default function AnimalInfo({ speciesList, selectedSpecies, setSelectedSp
         <button
           onClick={() => {
             setSelectedSpecies(activeTab);
-            setActivePage('prediction');
+            setActivePage('home');
           }}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm transition-colors self-start sm:self-auto"
         >

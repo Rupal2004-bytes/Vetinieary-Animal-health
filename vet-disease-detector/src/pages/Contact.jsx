@@ -21,7 +21,7 @@ export default function Contact() {
         <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full uppercase">
           Support & Clinic Partnerships
         </span>
-        <h1 className="text-3xl font-black text-slate-900">Get in Touch with VetScan AI</h1>
+        <h1 className="text-3xl font-black text-slate-900">Get in Touch with VetMyPet</h1>
         <p className="text-xs text-slate-500 max-w-md mx-auto">
           Have technical questions, want to partner your veterinary hospital, or need emergency assistance?
         </p>
@@ -42,7 +42,7 @@ export default function Contact() {
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
             <h3 className="font-bold text-slate-900 text-sm">📧 Email Support & Research</h3>
             <p className="text-slate-600">For academic collaborations, API keys, or feedback.</p>
-            <span className="font-bold text-emerald-700 block">support@vetscan-ai.org</span>
+            <span className="font-bold text-emerald-700 block">support@vetmypet.org</span>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
@@ -59,7 +59,7 @@ export default function Contact() {
               <div className="text-4xl text-emerald-600">✅</div>
               <h3 className="text-lg font-bold text-slate-900">Message Sent Successfully!</h3>
               <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                Thank you for contacting VetScan AI. Our veterinary support team will respond within 24 hours.
+                Thank you for contacting VetMyPet. Our veterinary support team will respond within 24 hours.
               </p>
               <button
                 onClick={() => { setSubmitted(false); setForm({ name: '', email: '', subject: 'General Inquiry', message: '' }); }}

@@ -68,9 +68,10 @@ func main() {
 	var vet ai.VeterinaryProvider = ai.MockVeterinaryProvider{}
 	if !cfg.DemoMode && cfg.HuggingFaceToken != "" {
 		provider := ai.HuggingFaceProvider{
-			Token:           cfg.HuggingFaceToken,
-			VisionModel:     cfg.VisionModel,
-			VeterinaryModel: cfg.VeterinaryModel,
+			Token:                 cfg.HuggingFaceToken,
+			VisionModel:           cfg.VisionModel,
+			VeterinaryModel:       cfg.VeterinaryModel,
+			VeterinaryEndpointURL: cfg.VeterinaryEndpointURL,
 		}
 		vision = provider
 		vet = provider

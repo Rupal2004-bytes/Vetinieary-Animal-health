@@ -102,7 +102,7 @@ export default function Emergency({ setActivePage }) {
             <h3 className="text-base font-bold text-slate-900 mb-2">Acute Veterinary Exam</h3>
             <p className="text-xs text-slate-600 mb-3">Cloudy painful eye, high fever with lethargy, sudden severe limping, persistent diarrhea.</p>
           </div>
-          <button onClick={() => setActivePage('prediction')} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2.5 rounded-xl transition-colors">
+          <button onClick={() => setActivePage('home')} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2.5 rounded-xl transition-colors">
             Run Symptom Checker
           </button>
         </div>

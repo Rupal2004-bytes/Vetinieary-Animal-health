@@ -61,7 +61,7 @@ export default function Dashboard({ setActivePage, user, historyList = [], onSel
             <span>➕ Add Animal Profile</span>
           </button>
           <button
-            onClick={() => setActivePage('prediction')}
+            onClick={() => setActivePage('home')}
             className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-colors flex items-center gap-1.5"
           >
             <span>🩺 New Diagnostic Scan</span>
@@ -164,7 +164,7 @@ export default function Dashboard({ setActivePage, user, historyList = [], onSel
                       </td>
                       <td className="py-3.5 px-4 text-right space-x-2">
                         <button
-                          onClick={() => setActivePage('prediction')}
+                          onClick={() => setActivePage('home')}
                           className="px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-bold transition-colors"
                         >
                           Run Scan
