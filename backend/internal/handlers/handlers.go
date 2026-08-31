@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -19,14 +20,15 @@ import (
 )
 
 type Handler struct {
-	DB       *database.DB
-	UserDB   *database.UserDB
-	Backups  *database.BackupManager
-	Storage  storage.Store
-	Vision   ai.VisionProvider
-	VetAI    ai.VeterinaryProvider
-	Clinics  clinics.Provider
-	MediaDir string
+	DB             *database.DB
+	UserDB         *database.UserDB
+	SurveillanceDB *database.SurveillanceDB
+	Backups        *database.BackupManager
+	Storage        storage.Store
+	Vision         ai.VisionProvider
+	VetAI          ai.VeterinaryProvider
+	Clinics        clinics.Provider
+	MediaDir       string
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -53,6 +55,27 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/clinics/nearby", h.nearbyClinics)
 	mux.HandleFunc("/api/reminders", h.reminders)
 
+	// Outbreak Surveillance, SOS Notifications & Village Clusters
+	mux.HandleFunc("/api/outbreaks", h.outbreaks)
+	mux.HandleFunc("/api/outbreaks/", h.outbreakSubroutes)
+	mux.HandleFunc("/api/notifications", h.notifications)
+	mux.HandleFunc("/api/notifications/read", h.markNotificationRead)
+	mux.HandleFunc("/api/notifications/read-all", h.markAllNotificationsRead)
+
+	// Vet Second Opinion / Review Queue & Directory
+	mux.HandleFunc("/api/vets", h.vetsList)
+	mux.HandleFunc("/api/vet-consultations", h.vetConsultations)
+	mux.HandleFunc("/api/vet-consultations/review", h.reviewVetConsultation)
+
+	// Medical & Vaccine Inventory Tracking (Vets, NGOs, Gov Dispensaries)
+	mux.HandleFunc("/api/inventory", h.inventory)
+
+	// Government & NGO Official Advisories
+	mux.HandleFunc("/api/gov-advisories", h.govAdvisories)
+
+	// Clinical Laboratory & Diagnostic Test Results
+	mux.HandleFunc("/api/clinic-test-results", h.clinicTestResults)
+
 	// Media File Server
 	mux.Handle("/media/", http.StripPrefix("/media/", http.FileServer(http.Dir(h.MediaDir))))
 }
@@ -66,11 +89,27 @@ func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
 }
 
 type authRequest struct {
-	Name     string `json:"name"`
-	FullName string `json:"full_name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Role     string `json:"role"`
+	Name               string `json:"name"`
+	FullName           string `json:"full_name"`
+	Email              string `json:"email"`
+	Password           string `json:"password"`
+	Role               string `json:"role"`
+	Phone              string `json:"phone"`
+	Address            string `json:"address"`
+	City               string `json:"city"`
+	District           string `json:"district"`
+	State              string `json:"state"`
+	Pincode            string `json:"pincode"`
+	FarmName           string `json:"farm_name"`
+	FarmVillage        string `json:"farm_village"`
+	FarmTaluka         string `json:"farm_taluka"`
+	LivestockTypes     string `json:"livestock_types"`
+	HerdSize           int    `json:"herd_size"`
+	ClinicName         string `json:"clinic_name"`
+	ClinicAddress      string `json:"clinic_address"`
+	ClinicHours        string `json:"clinic_hours"`
+	ClinicAvailability string `json:"clinic_availability"`
+	AvatarURL          string `json:"avatar_url"`
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
@@ -119,11 +158,32 @@ func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	role := strings.TrimSpace(req.Role)
+	if role == "" {
+		role = "pet_owner"
+	}
+
 	ip := clientIP(r)
 	user, err := h.UserDB.CreateUser(r.Context(), models.User{
-		Name:  name,
-		Email: req.Email,
-		Role:  req.Role,
+		Name:               name,
+		Email:              req.Email,
+		Role:               role,
+		Phone:              req.Phone,
+		Address:            req.Address,
+		City:               req.City,
+		District:           req.District,
+		State:              req.State,
+		Pincode:            req.Pincode,
+		FarmName:           req.FarmName,
+		FarmVillage:        req.FarmVillage,
+		FarmTaluka:         req.FarmTaluka,
+		LivestockTypes:     req.LivestockTypes,
+		HerdSize:           req.HerdSize,
+		ClinicName:         req.ClinicName,
+		ClinicAddress:      req.ClinicAddress,
+		ClinicHours:        req.ClinicHours,
+		ClinicAvailability: req.ClinicAvailability,
+		AvatarURL:          req.AvatarURL,
 	}, req.Password, ip)
 
 	if err != nil {
@@ -169,11 +229,26 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateProfileRequest struct {
-	Name       string `json:"name"`
-	Role       string `json:"role"`
-	Phone      string `json:"phone"`
-	ClinicName string `json:"clinic_name"`
-	AvatarURL  string `json:"avatar_url"`
+	Name               string `json:"name"`
+	Role               string `json:"role"`
+	Phone              string `json:"phone"`
+	Address                string `json:"address"`
+	City                   string `json:"city"`
+	District               string `json:"district"`
+	State                  string `json:"state"`
+	Pincode                string `json:"pincode"`
+	FarmName               string `json:"farm_name"`
+	FarmVillage            string `json:"farm_village"`
+	FarmTaluka             string `json:"farm_taluka"`
+	LivestockTypes         string `json:"livestock_types"`
+	HerdSize               int    `json:"herd_size"`
+	ClinicName             string `json:"clinic_name"`
+	ClinicAddress          string `json:"clinic_address"`
+	ClinicHours            string `json:"clinic_hours"`
+	ClinicAvailability     string `json:"clinic_availability"`
+	ClinicVisitingLocation string `json:"clinic_visiting_location"`
+	UnavailabilityNotice   string `json:"unavailability_notice"`
+	AvatarURL              string `json:"avatar_url"`
 }
 
 func (h *Handler) updateProfile(w http.ResponseWriter, r *http.Request) {
@@ -193,13 +268,61 @@ func (h *Handler) updateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.UserDB.UpdateProfile(r.Context(), user.ID, req.Name, req.Role, req.Phone, req.ClinicName, req.AvatarURL)
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = user.Name
+	}
+	role := strings.TrimSpace(req.Role)
+	if role == "" {
+		role = user.Role
+	}
+
+	updated, err := h.UserDB.UpdateProfile(r.Context(), models.User{
+		ID:                     user.ID,
+		Name:                   name,
+		Role:                   role,
+		Phone:                  req.Phone,
+		Address:                req.Address,
+		City:                   req.City,
+		District:               req.District,
+		State:                  req.State,
+		Pincode:                req.Pincode,
+		FarmName:               req.FarmName,
+		FarmVillage:            req.FarmVillage,
+		FarmTaluka:             req.FarmTaluka,
+		LivestockTypes:         req.LivestockTypes,
+		HerdSize:               req.HerdSize,
+		ClinicName:             req.ClinicName,
+		ClinicAddress:          req.ClinicAddress,
+		ClinicHours:            req.ClinicHours,
+		ClinicAvailability:     req.ClinicAvailability,
+		ClinicVisitingLocation: req.ClinicVisitingLocation,
+		UnavailabilityNotice:   req.UnavailabilityNotice,
+		AvatarURL:              req.AvatarURL,
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "database_error", "Could not update profile: "+err.Error())
 		return
 	}
 
 	writeJSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) vetsList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	district := r.URL.Query().Get("district")
+	if user, ok := h.userFromRequest(r); ok && district == "" {
+		district = user.District
+	}
+	list, err := h.UserDB.ListVets(r.Context(), district)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database_error", "Could not load veterinarians.")
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
 }
 
 type changePasswordRequest struct {
@@ -292,11 +415,28 @@ func (h *Handler) connectHuggingFace(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) animals(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		userID := int64(0)
-		if user, ok := h.userFromRequest(r); ok {
-			userID = user.ID
+		user, ok := h.userFromRequest(r)
+		if !ok {
+			writeJSON(w, http.StatusOK, []models.Animal{})
+			return
 		}
-		animals, err := h.DB.ListAnimals(r.Context(), userID)
+		q := r.URL.Query().Get("q")
+		tagNumber := r.URL.Query().Get("tag_number")
+		if tagNumber == "" {
+			tagNumber = r.URL.Query().Get("pashu_aadhaar")
+		}
+
+		if user.Role == "vet" {
+			animals, err := h.DB.ListAnimalsForVet(r.Context(), q, tagNumber)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "database_error", "Could not load animals: "+err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, animals)
+			return
+		}
+
+		animals, err := h.DB.ListAnimals(r.Context(), user.ID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "database_error", "Could not load animals.")
 			return
@@ -322,6 +462,24 @@ func (h *Handler) animals(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusCreated, created)
+	case http.MethodPut:
+		user, ok := h.userFromRequest(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Please sign in to update animal profiles.")
+			return
+		}
+		var a models.Animal
+		if err := json.NewDecoder(r.Body).Decode(&a); err != nil || a.ID == 0 {
+			writeError(w, http.StatusBadRequest, "invalid_json", "Invalid animal data or missing ID.")
+			return
+		}
+		a.UserID = user.ID
+		updated, err := h.DB.UpdateAnimal(r.Context(), a)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", "Could not update animal: "+err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -333,6 +491,18 @@ func (h *Handler) animalSubroutes(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+
+	if parts[0] == "tag" && len(parts) >= 2 && r.Method == http.MethodGet {
+		tagNumber := parts[1]
+		animal, err := h.DB.GetAnimalByTagNumber(r.Context(), tagNumber)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "not_found", "No animal profile found with Pashu Aadhaar #"+tagNumber)
+			return
+		}
+		writeJSON(w, http.StatusOK, animal)
+		return
+	}
+
 	id, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_id", "Invalid animal id.")
@@ -341,19 +511,54 @@ func (h *Handler) animalSubroutes(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 1 && r.Method == http.MethodGet {
 		animal, err := h.DB.GetAnimal(r.Context(), id)
 		if err != nil {
-			status := http.StatusInternalServerError
+			status := http.StatusNotFound
 			writeError(w, status, "not_found", "Animal not found.")
 			return
 		}
 		writeJSON(w, http.StatusOK, animal)
 		return
 	}
-	if len(parts) == 2 && parts[1] == "history" && r.Method == http.MethodGet {
-		userID := int64(0)
-		if user, ok := h.userFromRequest(r); ok {
-			userID = user.ID
+	if len(parts) == 1 && r.Method == http.MethodPut {
+		user, ok := h.userFromRequest(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Please sign in to update animal profiles.")
+			return
 		}
-		history, err := h.DB.ListScreenings(r.Context(), userID, id)
+		var a models.Animal
+		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", "Invalid animal data.")
+			return
+		}
+		a.ID = id
+		a.UserID = user.ID
+		updated, err := h.DB.UpdateAnimal(r.Context(), a)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+		return
+	}
+	if len(parts) == 1 && r.Method == http.MethodDelete {
+		user, ok := h.userFromRequest(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Please sign in to delete animal profiles.")
+			return
+		}
+		if err := h.DB.DeleteAnimal(r.Context(), id, user.ID); err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
+	if len(parts) == 2 && parts[1] == "history" && r.Method == http.MethodGet {
+		user, ok := h.userFromRequest(r)
+		if !ok {
+			writeJSON(w, http.StatusOK, []models.HealthScreening{})
+			return
+		}
+		history, err := h.DB.ListScreenings(r.Context(), user.ID, id)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "database_error", "Could not load health history.")
 			return
@@ -479,20 +684,79 @@ func (h *Handler) analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var user models.User
+	var ok bool
+	if u, found := h.userFromRequest(r); found {
+		user = u
+		ok = true
+	}
+
+	screeningDistrict := ""
+	screeningTaluka := ""
+	screeningFarm := ""
+	if ok {
+		screeningDistrict = user.District
+		screeningTaluka = user.FarmTaluka
+		screeningFarm = user.FarmName
+	}
+
 	screening, err := h.DB.CreateScreening(ctx, models.HealthScreening{
 		AnimalID:       animal.ID,
+		UserID:         animal.UserID,
 		MediaURL:       media.URL,
 		MediaType:      media.Type,
 		Symptoms:       req.Symptoms,
 		VisualAnalysis: visual,
 		Assessment:     assessment,
 		Urgency:        assessment.Urgency,
+		District:       screeningDistrict,
+		Taluka:         screeningTaluka,
+		FarmName:       screeningFarm,
 	})
 	if err != nil {
 		log.Printf("Failed to save health screening: %v (animal_id=%d, media_url=%s)", err, animal.ID, media.URL)
 		writeError(w, http.StatusInternalServerError, "database_error", "Could not save the health screening: "+err.Error())
 		return
 	}
+
+	// Automatic Outbreak Sensing & SOS Dispatch
+	if h.SurveillanceDB != nil && len(assessment.PossibleConditions) > 0 {
+		topCondition := assessment.PossibleConditions[0]
+		isHighUrgency := strings.ToLower(assessment.Urgency) == "high" || strings.ToLower(assessment.Urgency) == "emergency"
+		isContagious := strings.ToLower(topCondition.Likelihood) == "high" || strings.ToLower(topCondition.Likelihood) == "moderate"
+
+		if isHighUrgency || isContagious {
+			district := screeningDistrict
+			if district == "" {
+				district = "Pune" // default region if unspecified
+			}
+			taluka := screeningTaluka
+			if taluka == "" {
+				taluka = "Central"
+			}
+			species := animal.Species
+			if species == "" {
+				species = "Animal"
+			}
+
+			go func() {
+				bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				_, _ = h.SurveillanceDB.CreateOrUpdateOutbreak(bgCtx, models.Outbreak{
+					DiseaseName:     topCondition.Name,
+					Species:         species,
+					District:        district,
+					Taluka:          taluka,
+					Village:         user.FarmVillage,
+					FarmName:        user.FarmName,
+					AffectedCount:   1,
+					Severity:        strings.ToUpper(assessment.Urgency),
+					PreventionGuide: strings.Join(assessment.RecommendedNextSteps, " "),
+				})
+			}()
+		}
+	}
+
 	writeJSON(w, http.StatusCreated, screening)
 }
 
@@ -501,8 +765,12 @@ func (h *Handler) resolveAnimal(ctx context.Context, req analyzeRequest, r *http
 		return h.DB.GetAnimal(ctx, req.AnimalID)
 	}
 	userID := int64(1)
+	district := ""
+	taluka := ""
 	if user, ok := h.userFromRequest(r); ok {
 		userID = user.ID
+		district = user.District
+		taluka = user.FarmTaluka
 	}
 	name := strings.TrimSpace(req.Animal.Name)
 	if name == "" {
@@ -515,6 +783,12 @@ func (h *Handler) resolveAnimal(ctx context.Context, req analyzeRequest, r *http
 	req.Animal.UserID = userID
 	req.Animal.Name = name
 	req.Animal.Species = species
+	if req.Animal.District == "" {
+		req.Animal.District = district
+	}
+	if req.Animal.Taluka == "" {
+		req.Animal.Taluka = taluka
+	}
 	return h.DB.CreateAnimal(ctx, req.Animal)
 }
 
@@ -549,11 +823,12 @@ func (h *Handler) nearbyClinics(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) reminders(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		userID := int64(0)
-		if user, ok := h.userFromRequest(r); ok {
-			userID = user.ID
+		user, ok := h.userFromRequest(r)
+		if !ok {
+			writeJSON(w, http.StatusOK, []models.Reminder{})
+			return
 		}
-		remindersList, err := h.DB.ListReminders(r.Context(), userID)
+		remindersList, err := h.DB.ListReminders(r.Context(), user.ID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "database_error", "Could not load reminders.")
 			return
@@ -573,6 +848,498 @@ func (h *Handler) reminders(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid_reminder", "Reminder type, title, and due date are required.")
 			return
 		}
+		writeJSON(w, http.StatusCreated, created)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+// ----------------- Surveillance, SOS Notifications & Inventory -----------------
+
+func (h *Handler) outbreaks(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		district := r.URL.Query().Get("district")
+		species := r.URL.Query().Get("species")
+		if user, ok := h.userFromRequest(r); ok && district == "" {
+			district = user.District
+		}
+		list, err := h.SurveillanceDB.ListOutbreaks(r.Context(), district, species)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", "Could not load outbreaks.")
+			return
+		}
+		writeJSON(w, http.StatusOK, list)
+	case http.MethodPost:
+		var ob models.Outbreak
+		if err := json.NewDecoder(r.Body).Decode(&ob); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", "Invalid outbreak details.")
+			return
+		}
+		created, err := h.SurveillanceDB.CreateOrUpdateOutbreak(r.Context(), ob)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "outbreak_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusCreated, created)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *Handler) outbreakSubroutes(w http.ResponseWriter, r *http.Request) {
+	sub := strings.TrimPrefix(r.URL.Path, "/api/outbreaks/")
+	if sub == "report-recovery" && r.Method == http.MethodPost {
+		var req struct {
+			OutbreakID     int64  `json:"outbreak_id"`
+			RecoveredCount int    `json:"recovered_count"`
+			Notes          string `json:"notes"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.OutbreakID == 0 {
+			writeError(w, http.StatusBadRequest, "invalid_json", "Outbreak ID is required.")
+			return
+		}
+		reporterName := "Local Farmer / Herdsman"
+		reporterRole := "farmer"
+		if user, ok := h.userFromRequest(r); ok {
+			reporterName = user.Name
+			reporterRole = user.Role
+		}
+		updated, err := h.SurveillanceDB.ReportOutbreakRecovery(r.Context(), req.OutbreakID, req.RecoveredCount, req.Notes, reporterName, reporterRole)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+		return
+	}
+
+	if sub == "resolve" && r.Method == http.MethodPost {
+		user, ok := h.userFromRequest(r)
+		if !ok || (user.Role != "vet" && user.Role != "ngo" && user.Role != "gov") {
+			writeError(w, http.StatusForbidden, "unauthorized", "Only veterinarians and officials can mark outbreaks as officially resolved.")
+			return
+		}
+		var req struct {
+			OutbreakID int64  `json:"outbreak_id"`
+			Notes      string `json:"notes"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.OutbreakID == 0 {
+			writeError(w, http.StatusBadRequest, "invalid_json", "Outbreak ID is required.")
+			return
+		}
+		updated, err := h.SurveillanceDB.ResolveOutbreak(r.Context(), req.OutbreakID, req.Notes, user.Name)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		id, err := strconv.ParseInt(sub, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_id", "Invalid outbreak ID.")
+			return
+		}
+		ob, err := h.SurveillanceDB.GetOutbreakByID(r.Context(), id)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "not_found", "Outbreak not found.")
+			return
+		}
+		writeJSON(w, http.StatusOK, ob)
+		return
+	}
+
+	w.WriteHeader(http.StatusMethodNotAllowed)
+}
+
+func (h *Handler) notifications(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	userID := int64(0)
+	role := ""
+	district := ""
+	if user, ok := h.userFromRequest(r); ok {
+		userID = user.ID
+		role = user.Role
+		district = user.District
+	}
+	list, err := h.SurveillanceDB.ListNotifications(r.Context(), userID, role, district)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database_error", "Could not load notifications.")
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (h *Handler) markNotificationRead(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	_ = h.SurveillanceDB.MarkNotificationRead(r.Context(), req.ID)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (h *Handler) markAllNotificationsRead(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	userID := int64(0)
+	if user, ok := h.userFromRequest(r); ok {
+		userID = user.ID
+	}
+	_ = h.SurveillanceDB.MarkAllNotificationsRead(r.Context(), userID)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (h *Handler) vetConsultations(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		user, ok := h.userFromRequest(r)
+		if !ok {
+			writeJSON(w, http.StatusOK, []models.VetConsultation{})
+			return
+		}
+		status := r.URL.Query().Get("status")
+		var list []models.VetConsultation
+		var err error
+		if user.Role == "vet" {
+			// Vets see all cases in queue
+			list, err = h.SurveillanceDB.ListVetConsultations(r.Context(), user.ID, 0, status)
+		} else {
+			// Farmers / Pet owners see their submitted cases
+			list, err = h.SurveillanceDB.ListVetConsultations(r.Context(), 0, user.ID, status)
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", "Could not load case reviews.")
+			return
+		}
+		writeJSON(w, http.StatusOK, list)
+	case http.MethodPost:
+		var raw struct {
+			ScreeningID int64  `json:"screening_id"`
+			AnimalName  string `json:"animal_name"`
+			Species     string `json:"species"`
+			Breed       string `json:"breed"`
+			MediaURL    string `json:"media_url"`
+			Symptoms    any    `json:"symptoms"`
+			DoubtReason string `json:"doubt_reason"`
+			OwnerNotes  string `json:"owner_notes"`
+			AIDiagnosis string `json:"ai_diagnosis"`
+			AIUrgency   string `json:"ai_urgency"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", "Invalid consultation request.")
+			return
+		}
+
+		var symList []string
+		switch v := raw.Symptoms.(type) {
+		case []any:
+			for _, item := range v {
+				if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+					symList = append(symList, strings.TrimSpace(s))
+				}
+			}
+		case []string:
+			symList = v
+		case string:
+			if strings.TrimSpace(v) != "" {
+				symList = []string{strings.TrimSpace(v)}
+			}
+		}
+
+		c := models.VetConsultation{
+			ScreeningID: raw.ScreeningID,
+			AnimalName:  raw.AnimalName,
+			Species:     raw.Species,
+			Breed:       raw.Breed,
+			MediaURL:    raw.MediaURL,
+			Symptoms:    symList,
+			OwnerNotes:  raw.OwnerNotes,
+			AIDiagnosis: raw.AIDiagnosis,
+			AIUrgency:   raw.AIUrgency,
+		}
+		if c.AnimalName == "" {
+			c.AnimalName = "Patient"
+		}
+		if c.Species == "" {
+			c.Species = "Animal"
+		}
+		if c.AIDiagnosis == "" {
+			c.AIDiagnosis = "Clinical Review Required"
+		}
+		if raw.DoubtReason != "" && c.OwnerNotes == "" {
+			c.OwnerNotes = raw.DoubtReason
+		}
+
+		if user, ok := h.userFromRequest(r); ok {
+			c.UserID = user.ID
+			c.UserName = user.Name
+			c.UserRole = user.Role
+			c.UserPhone = user.Phone
+			c.Location = user.District
+			if user.FarmName != "" {
+				c.Location = user.FarmName + ", " + user.District
+			}
+		}
+		created, err := h.SurveillanceDB.RequestVetConsultation(r.Context(), c)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "consultation_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusCreated, created)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *Handler) reviewVetConsultation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	user, ok := h.userFromRequest(r)
+	if !ok || user.Role != "vet" {
+		writeError(w, http.StatusForbidden, "vet_only", "Only licensed veterinarians can review diagnostic cases.")
+		return
+	}
+
+	var req struct {
+		ID           int64  `json:"id"`
+		Diagnosis    string `json:"diagnosis"`
+		Suggestion   string `json:"suggestion"`
+		Prescription string `json:"prescription"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == 0 {
+		writeError(w, http.StatusBadRequest, "invalid_json", "Case ID and suggestions are required.")
+		return
+	}
+
+	reviewed, err := h.SurveillanceDB.ReviewVetConsultation(r.Context(), req.ID, user.ID, user.Name, req.Diagnosis, req.Suggestion, req.Prescription)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, reviewed)
+}
+
+func (h *Handler) inventory(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		district := r.URL.Query().Get("district")
+		orgType := r.URL.Query().Get("org_type")
+		userID := int64(0)
+		if r.URL.Query().Get("my_inventory") == "true" {
+			if user, ok := h.userFromRequest(r); ok {
+				userID = user.ID
+			}
+		}
+		list, err := h.SurveillanceDB.ListInventory(r.Context(), district, orgType, userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", "Could not load inventory items.")
+			return
+		}
+		writeJSON(w, http.StatusOK, list)
+	case http.MethodPost, http.MethodPut:
+		user, ok := h.userFromRequest(r)
+		if !ok || (user.Role != "vet" && user.Role != "ngo" && user.Role != "gov") {
+			writeError(w, http.StatusForbidden, "unauthorized", "Only veterinarians, NGOs, and government dispensaries can manage medical inventory.")
+			return
+		}
+		var item models.InventoryItem
+		if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", "Invalid inventory item format.")
+			return
+		}
+		item.UserID = user.ID
+		if item.OwnerName == "" {
+			item.OwnerName = user.ClinicName
+			if item.OwnerName == "" {
+				item.OwnerName = user.Name
+			}
+		}
+		if item.OrgType == "" {
+			if user.Role == "vet" {
+				item.OrgType = "clinic"
+			} else if user.Role == "ngo" {
+				item.OrgType = "ngo"
+			} else {
+				item.OrgType = "gov_dispensary"
+			}
+		}
+		if item.District == "" {
+			item.District = user.District
+		}
+		upserted, err := h.SurveillanceDB.UpsertInventory(r.Context(), item)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "inventory_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, upserted)
+	case http.MethodDelete:
+		user, ok := h.userFromRequest(r)
+		if !ok || (user.Role != "vet" && user.Role != "ngo" && user.Role != "gov") {
+			writeError(w, http.StatusForbidden, "unauthorized", "Only authorized providers can delete stock items.")
+			return
+		}
+		idStr := r.URL.Query().Get("id")
+		id, _ := strconv.ParseInt(idStr, 10, 64)
+		if id == 0 {
+			writeError(w, http.StatusBadRequest, "invalid_id", "Inventory item ID is required.")
+			return
+		}
+		if err := h.SurveillanceDB.DeleteInventory(r.Context(), id, user.ID); err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *Handler) govAdvisories(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		district := r.URL.Query().Get("district")
+		if user, ok := h.userFromRequest(r); ok && district == "" {
+			district = user.District
+		}
+		list, err := h.SurveillanceDB.ListGovAdvisories(r.Context(), district)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", "Could not load advisories.")
+			return
+		}
+		writeJSON(w, http.StatusOK, list)
+	case http.MethodPost:
+		user, ok := h.userFromRequest(r)
+		if !ok || (user.Role != "ngo" && user.Role != "gov" && user.Role != "vet") {
+			writeError(w, http.StatusForbidden, "unauthorized", "Only NGO and Government officials can publish official circulars and advisories.")
+			return
+		}
+		var adv models.GovAdvisory
+		if err := json.NewDecoder(r.Body).Decode(&adv); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", "Invalid advisory payload.")
+			return
+		}
+		if strings.TrimSpace(adv.Title) == "" || strings.TrimSpace(adv.Content) == "" {
+			writeError(w, http.StatusBadRequest, "missing_fields", "Directive title and content are required.")
+			return
+		}
+		if adv.Issuer == "" {
+			adv.Issuer = user.Name
+		}
+		if adv.District == "" {
+			adv.District = user.District
+			if adv.District == "" {
+				adv.District = "Statewide"
+			}
+		}
+		if adv.DateIssued == "" {
+			adv.DateIssued = time.Now().Format("02 Jan 2006")
+		}
+		if adv.Urgency == "" {
+			adv.Urgency = "HIGH"
+		}
+		created, err := h.SurveillanceDB.CreateGovAdvisory(r.Context(), adv)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusCreated, created)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *Handler) clinicTestResults(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		user, ok := h.userFromRequest(r)
+		if !ok {
+			writeJSON(w, http.StatusOK, []models.ClinicTestResult{})
+			return
+		}
+		animalIDStr := r.URL.Query().Get("animal_id")
+		animalID, _ := strconv.ParseInt(animalIDStr, 10, 64)
+		vetID := int64(0)
+		userID := user.ID
+		if user.Role == "vet" {
+			vetID = user.ID
+		}
+		list, err := h.DB.ListClinicTestResults(r.Context(), animalID, userID, vetID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", "Could not load laboratory test results.")
+			return
+		}
+		writeJSON(w, http.StatusOK, list)
+	case http.MethodPost:
+		user, ok := h.userFromRequest(r)
+		if !ok || user.Role != "vet" {
+			writeError(w, http.StatusForbidden, "unauthorized", "Only licensed veterinarians can publish laboratory test results.")
+			return
+		}
+		var testRes models.ClinicTestResult
+		if err := json.NewDecoder(r.Body).Decode(&testRes); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", "Invalid test result data.")
+			return
+		}
+		if testRes.AnimalID <= 0 || strings.TrimSpace(testRes.TestType) == "" || strings.TrimSpace(testRes.Interpretation) == "" {
+			writeError(w, http.StatusBadRequest, "missing_fields", "Animal ID, Test Type, and Interpretation are required.")
+			return
+		}
+		testRes.VetID = user.ID
+		testRes.VetName = user.Name
+		testRes.ClinicName = user.ClinicName
+
+		// Look up animal owner if not provided
+		if testRes.UserID <= 0 {
+			if animal, err := h.DB.GetAnimal(r.Context(), testRes.AnimalID); err == nil {
+				testRes.UserID = animal.UserID
+				testRes.AnimalName = animal.Name
+			}
+		}
+
+		created, err := h.DB.CreateClinicTestResult(r.Context(), testRes)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database_error", "Could not save test result: "+err.Error())
+			return
+		}
+
+		// Broadcast real-time notification to the animal owner
+		if created.UserID > 0 {
+			animalName := "Patient"
+			if a, err := h.DB.GetAnimal(r.Context(), created.AnimalID); err == nil && a.Name != "" {
+				animalName = a.Name
+			}
+			severity := "INFO"
+			if strings.EqualFold(created.Status, "Critical") {
+				severity = "CRITICAL"
+			} else if strings.EqualFold(created.Status, "Abnormal") {
+				severity = "URGENT"
+			}
+			_, _ = h.SurveillanceDB.ExecContext(r.Context(), `
+INSERT INTO notifications (user_id, role_target, district, title, message, severity, is_sos, read, action_url, created_at)
+VALUES (?, 'all', ?, ?, ?, ?, 0, 0, '#dashboard', CURRENT_TIMESTAMP)`,
+				created.UserID,
+				user.District,
+				fmt.Sprintf("🧪 Lab Test Results Published for %s", animalName),
+				fmt.Sprintf("Dr. %s (%s) published %s results. Diagnostic status: %s. %s", user.Name, user.ClinicName, created.TestType, created.Status, created.Interpretation),
+				severity,
+			)
+		}
+
 		writeJSON(w, http.StatusCreated, created)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)

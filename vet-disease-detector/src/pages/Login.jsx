@@ -4,7 +4,6 @@ import { loginAccount } from '../api/client.js';
 export default function Login({ setActivePage, onAuthSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('owner');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -13,10 +12,10 @@ export default function Login({ setActivePage, onAuthSuccess }) {
     setSubmitting(true);
     setError('');
     try {
-      const auth = await loginAccount({ email, password, role });
+      const auth = await loginAccount({ email, password });
       onAuthSuccess?.(auth);
     } catch (err) {
-      setError(err.message || 'Could not sign in.');
+      setError(err.message || 'Could not sign in. Please check your email and password.');
     } finally {
       setSubmitting(false);
     }
@@ -29,32 +28,7 @@ export default function Login({ setActivePage, onAuthSuccess }) {
           🐾
         </div>
         <h2 className="text-2xl font-black text-slate-900">Welcome Back</h2>
-        <p className="text-xs text-slate-500">Access your patient diagnostic portal and prediction history</p>
-      </div>
-
-      {/* Role Toggle */}
-      <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold">
-        <button
-          type="button"
-          onClick={() => setRole('owner')}
-          className={`py-2 rounded-lg transition-all ${role === 'owner' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-        >
-          Pet Owner
-        </button>
-        <button
-          type="button"
-          onClick={() => setRole('farmer')}
-          className={`py-2 rounded-lg transition-all ${role === 'farmer' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-        >
-          Livestock / Farm
-        </button>
-        <button
-          type="button"
-          onClick={() => setRole('veterinarian')}
-          className={`py-2 rounded-lg transition-all ${role === 'veterinarian' ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-        >
-          Veterinarian
-        </button>
+        <p className="text-xs text-slate-500">Sign in to access your veterinary animal health workspace</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4 text-xs">

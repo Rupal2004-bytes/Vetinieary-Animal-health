@@ -7,11 +7,11 @@ export default function About({ setActivePage }) {
       {/* Top Banner */}
       <div className="bg-gradient-to-r from-emerald-950 to-slate-900 rounded-3xl p-8 sm:p-12 text-white shadow-xl space-y-4">
         <span className="text-xs font-bold uppercase tracking-widest text-emerald-400 bg-emerald-900/50 px-3 py-1 rounded-full border border-emerald-800">
-          About VetMyPet
+          About PashuRakshak (पशुरक्षक)
         </span>
-        <h1 className="text-3xl sm:text-5xl font-black">Empowering Animal Healthcare with AI</h1>
+        <h1 className="text-3xl sm:text-5xl font-black">Empowering Animal Healthcare & Surveillance</h1>
         <p className="text-slate-300 text-sm sm:text-base max-w-2xl leading-relaxed">
-          VetMyPet was developed by veterinary clinicians, animal health researchers, and machine learning engineers to reduce diagnostic delays, prevent disease outbreaks in livestock herds, and save companion animal lives.
+          PashuRakshak was developed in alignment with Maharashtra Problem Statement ID 26128 by veterinary clinicians, animal health researchers, and software engineers to eliminate diagnostic delays, prevent livestock epidemics, and protect farmers' livelihoods.
         </p>
       </div>
 

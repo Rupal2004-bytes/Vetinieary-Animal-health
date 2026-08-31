@@ -39,10 +39,19 @@ func main() {
 	db.OnChange = backupMgr.TriggerAsyncBackup
 	log.Printf("Application database loaded (%s) with versioned migrations", cfg.DatabasePath)
 
-	// 4. Run Server-Internal Health Checks on startup (server-only verification)
-	database.RunInternalHealthChecks(cfg.UserDatabasePath, cfg.DatabasePath)
+	// 4. Initialize surveillance & outbreak database (runs versioned migrations on startup)
+	surveillanceDB, err := database.OpenSurveillanceDB(cfg.SurveillanceDatabasePath)
+	if err != nil {
+		log.Fatalf("failed to open surveillance database (%s): %v", cfg.SurveillanceDatabasePath, err)
+	}
+	defer surveillanceDB.Close()
+	surveillanceDB.OnChange = backupMgr.TriggerAsyncBackup
+	log.Printf("Outbreak surveillance database loaded (%s) with versioned migrations", cfg.SurveillanceDatabasePath)
 
-	// 5. Initial snapshot backup & periodic scheduled snapshot
+	// 5. Run Server-Internal Health Checks on startup (server-only verification)
+	database.RunInternalHealthChecks(cfg.UserDatabasePath, cfg.DatabasePath, cfg.SurveillanceDatabasePath)
+
+	// 6. Initial snapshot backup & periodic scheduled snapshot
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -63,7 +72,7 @@ func main() {
 		}
 	}()
 
-	// 6. Initialize AI providers
+	// 7. Initialize AI providers
 	var vision ai.VisionProvider = ai.MockVisionProvider{}
 	var vet ai.VeterinaryProvider = ai.MockVeterinaryProvider{}
 	if !cfg.DemoMode && cfg.HuggingFaceToken != "" {
@@ -80,16 +89,17 @@ func main() {
 		log.Printf("Running in AI demo simulation mode")
 	}
 
-	// 7. Initialize Handlers and Routes (NO admin endpoints exposed)
+	// 8. Initialize Handlers and Routes (NO admin endpoints exposed)
 	h := &handlers.Handler{
-		DB:       db,
-		UserDB:   userDB,
-		Backups:  backupMgr,
-		Storage:  storage.NewLocalStore(cfg.MediaStoragePath),
-		Vision:   vision,
-		VetAI:    vet,
-		Clinics:  clinics.MockProvider{},
-		MediaDir: cfg.MediaStoragePath,
+		DB:             db,
+		UserDB:         userDB,
+		SurveillanceDB: surveillanceDB,
+		Backups:        backupMgr,
+		Storage:        storage.NewLocalStore(cfg.MediaStoragePath),
+		Vision:         vision,
+		VetAI:          vet,
+		Clinics:        clinics.MockProvider{},
+		MediaDir:       cfg.MediaStoragePath,
 	}
 
 	mux := http.NewServeMux()

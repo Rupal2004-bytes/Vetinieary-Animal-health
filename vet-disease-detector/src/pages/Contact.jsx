@@ -21,9 +21,9 @@ export default function Contact() {
         <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full uppercase">
           Support & Clinic Partnerships
         </span>
-        <h1 className="text-3xl font-black text-slate-900">Get in Touch with VetMyPet</h1>
+        <h1 className="text-3xl font-black text-slate-900">Get in Touch with PashuRakshak</h1>
         <p className="text-xs text-slate-500 max-w-md mx-auto">
-          Have technical questions, want to partner your veterinary hospital, or need emergency assistance?
+          Have technical questions, want to partner your veterinary hospital or dispensary, or need emergency assistance?
         </p>
       </div>
 
@@ -32,23 +32,23 @@ export default function Contact() {
         {/* Contact Info Cards */}
         <div className="md:col-span-5 space-y-4 text-xs">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-            <h3 className="font-bold text-slate-900 text-sm">🚨 24/7 Emergency Medical Hotline</h3>
-            <p className="text-slate-600">Immediate veterinary triage support for life-threatening cases.</p>
-            <a href="tel:1800555911" className="text-red-600 font-bold text-sm block hover:underline">
-              📞 +1 (800) 555-VET-911
+            <h3 className="font-bold text-slate-900 text-sm">🚨 Emergency Veterinary Helpline</h3>
+            <p className="text-slate-600">Immediate veterinary triage support for critical cases & mobile clinic dispatch.</p>
+            <a href="tel:1962" className="text-emerald-700 font-bold text-sm block hover:underline">
+              📞 1962 (Toll Free Mobile Clinic Hotline)
             </a>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
             <h3 className="font-bold text-slate-900 text-sm">📧 Email Support & Research</h3>
-            <p className="text-slate-600">For academic collaborations, API keys, or feedback.</p>
-            <span className="font-bold text-emerald-700 block">support@vetmypet.org</span>
+            <p className="text-slate-600">For district administration, API integration, or clinical feedback.</p>
+            <span className="font-bold text-emerald-700 block">support@pashurakshak.gov.in</span>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-            <h3 className="font-bold text-slate-900 text-sm">🏢 Global Operations Center</h3>
-            <p className="text-slate-600">742 Evergreen Veterinary Innovation Center, BioTech Campus</p>
-            <span className="text-slate-400">Available Mon-Fri 08:00 - 18:00 EST</span>
+            <h3 className="font-bold text-slate-900 text-sm">🏛️ Maharashtra Command Center</h3>
+            <p className="text-slate-600">Department of Animal Husbandry, Govt. of Maharashtra</p>
+            <span className="text-slate-400">Pune & Mumbai Regional Headquarters</span>
           </div>
         </div>
 
@@ -59,7 +59,7 @@ export default function Contact() {
               <div className="text-4xl text-emerald-600">✅</div>
               <h3 className="text-lg font-bold text-slate-900">Message Sent Successfully!</h3>
               <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                Thank you for contacting VetMyPet. Our veterinary support team will respond within 24 hours.
+                Thank you for contacting PashuRakshak. Our veterinary support team will respond within 24 hours.
               </p>
               <button
                 onClick={() => { setSubmitted(false); setForm({ name: '', email: '', subject: 'General Inquiry', message: '' }); }}

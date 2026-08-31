@@ -2,20 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>VetMyPet - AI Animal Health & Veterinary Diagnostic Platform - Technical Specification & Architecture Whitepaper</title>
+<title>PashuRakshak (पशुरक्षक) - Animal Health & Outbreak Surveillance Platform - Technical Specification & Architecture Whitepaper</title>
 <style>
   @page {
-    size: A4;
-    margin: 20mm 15mm 20mm 15mm;
+    size: A4 portrait;
+    margin: 12mm 12mm 12mm 12mm;
     @bottom-right {
       content: counter(page);
     }
   }
 
   body {
-    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
-    font-size: 10.5pt;
-    line-height: 1.55;
+    font-family: 'Liberation Sans', 'DejaVu Sans', Arial, sans-serif;
+    font-size: 8.3pt;
+    line-height: 1.35;
     color: #1e293b;
     background-color: #ffffff;
     margin: 0;
@@ -24,219 +24,122 @@
 
   /* Cover & Title Section */
   .cover {
-    border-bottom: 3px solid #2563eb;
-    padding-bottom: 25px;
-    margin-bottom: 30px;
+    border-bottom: 2.5px solid #059669;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
   }
   .title-tag {
     display: inline-block;
-    background: #dbeafe;
-    color: #1d4ed8;
-    font-size: 8.5pt;
-    font-weight: 700;
+    background-color: #d1fae5;
+    color: #065f46;
+    font-size: 7.2pt;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    padding: 4px 10px;
-    border-radius: 4px;
-    margin-bottom: 12px;
+    letter-spacing: 0.8px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-bottom: 4px;
   }
   h1.main-title {
-    font-size: 24pt;
+    font-size: 16pt;
     font-weight: 800;
     color: #0f172a;
     line-height: 1.2;
-    margin: 0 0 10px 0;
+    margin: 0 0 4px 0;
   }
   .sub-title {
-    font-size: 12.5pt;
+    font-size: 9.5pt;
     color: #475569;
-    margin: 0 0 15px 0;
-    font-weight: 400;
-  }
-  .meta-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 12px 15px;
-    font-size: 9pt;
-  }
-  .meta-item strong {
-    color: #0f172a;
-    display: block;
-    margin-bottom: 2px;
-  }
-  .meta-item span {
-    color: #64748b;
+    margin: 0 0 6px 0;
+    font-weight: 500;
   }
 
   /* Headings */
   h2 {
-    font-size: 15pt;
-    font-weight: 700;
+    font-size: 11pt;
+    font-weight: 800;
     color: #0f172a;
-    border-bottom: 1.5px solid #e2e8f0;
-    padding-bottom: 6px;
-    margin-top: 28px;
-    margin-bottom: 12px;
-    page-break-after: avoid;
-  }
-  h3 {
-    font-size: 12pt;
-    font-weight: 700;
-    color: #1e3a8a;
-    margin-top: 18px;
-    margin-bottom: 8px;
-    page-break-after: avoid;
-  }
-  h4 {
-    font-size: 10.5pt;
-    font-weight: 700;
-    color: #334155;
-    margin-top: 14px;
+    border-bottom: 1.5px solid #cbd5e1;
+    padding-bottom: 2px;
+    margin-top: 10px;
     margin-bottom: 6px;
     page-break-after: avoid;
   }
 
-  /* Content Elements */
   p {
-    margin: 0 0 10px 0;
+    margin: 0 0 5px 0;
     text-align: justify;
-  }
-  ul, ol {
-    margin: 0 0 12px 0;
-    padding-left: 20px;
-  }
-  li {
-    margin-bottom: 4px;
   }
 
   /* Callout Boxes */
   .callout {
-    background: #f0fdf4;
-    border-left: 4px solid #16a34a;
-    border-radius: 0 6px 6px 0;
-    padding: 10px 14px;
-    margin: 12px 0;
-    font-size: 9.5pt;
+    background-color: #f0fdf4;
+    border-left: 4px solid #10b981;
+    padding: 6px 8px;
+    margin: 6px 0;
+    font-size: 8pt;
+    page-break-inside: avoid;
   }
   .callout.info {
-    background: #eff6ff;
+    background-color: #eff6ff;
     border-left-color: #2563eb;
   }
   .callout.warning {
-    background: #fffbeb;
+    background-color: #fffbeb;
     border-left-color: #d97706;
   }
   .callout-title {
-    font-weight: 700;
+    font-weight: 800;
     color: #0f172a;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 
   /* Tables */
   table {
     width: 100%;
     border-collapse: collapse;
-    margin: 14px 0;
-    font-size: 9pt;
+    margin: 5px 0 8px 0;
+    font-size: 7.6pt;
     page-break-inside: avoid;
   }
   th {
-    background: #f1f5f9;
+    background-color: #f1f5f9;
     color: #0f172a;
-    font-weight: 700;
+    font-weight: bold;
     text-align: left;
-    padding: 8px 10px;
+    padding: 4px 6px;
     border: 1px solid #cbd5e1;
   }
   td {
-    padding: 7px 10px;
-    border: 1px solid #e2e8f0;
+    padding: 4px 6px;
+    border: 1px solid #cbd5e1;
     vertical-align: top;
   }
   tr:nth-child(even) td {
-    background: #f8fafc;
+    background-color: #f8fafc;
   }
 
-  /* Code & Syntax */
   code {
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
-    font-size: 8.5pt;
-    background: #f1f5f9;
+    font-family: 'Liberation Mono', 'Courier New', monospace;
+    font-size: 7.2pt;
+    background-color: #f1f5f9;
     color: #0f172a;
-    padding: 1px 4px;
-    border-radius: 3px;
+    padding: 1px 2px;
+    border-radius: 2px;
     border: 1px solid #e2e8f0;
-  }
-  pre {
-    background: #0f172a;
-    color: #f8fafc;
-    font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
-    font-size: 8pt;
-    line-height: 1.45;
-    padding: 12px;
-    border-radius: 6px;
-    overflow-x: auto;
-    margin: 12px 0;
-    page-break-inside: avoid;
-  }
-  pre code {
-    background: transparent;
-    color: inherit;
-    padding: 0;
-    border: none;
-  }
-
-  /* Architecture Diagram Box */
-  .diagram-box {
-    background: #f8fafc;
-    border: 1.5px dashed #cbd5e1;
-    border-radius: 6px;
-    padding: 12px;
-    margin: 14px 0;
-    font-family: monospace;
-    font-size: 8pt;
-    line-height: 1.35;
-    color: #1e293b;
-    page-break-inside: avoid;
-  }
-
-  /* Grid Layouts */
-  .card-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin: 12px 0;
-  }
-  .card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 10px 12px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-  }
-  .card-header {
-    font-weight: 700;
-    color: #1e3a8a;
-    font-size: 10pt;
-    margin-bottom: 4px;
   }
 
   .badge {
     display: inline-block;
-    font-size: 7.5pt;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 3px;
+    font-size: 6.5pt;
+    font-weight: bold;
+    padding: 1px 4px;
+    border-radius: 2px;
     text-transform: uppercase;
   }
-  .badge-blue { background: #dbeafe; color: #1e40af; }
-  .badge-green { background: #dcfce7; color: #166534; }
-  .badge-amber { background: #fef3c7; color: #92400e; }
-  .badge-purple { background: #f3e8ff; color: #6b21a8; }
+  .badge-green { background-color: #dcfce7; color: #166534; }
+  .badge-amber { background-color: #fef3c7; color: #92400e; }
+  .badge-red { background-color: #fee2e2; color: #991b1b; }
 
   .page-break {
     page-break-before: always;
@@ -245,439 +148,402 @@
 </head>
 <body>
 
-<!-- Cover / Header -->
+<!-- ==================== PAGE 1 ==================== -->
 <div class="cover">
-  <span class="title-tag">System Architecture & Technical Specification</span>
-  <h1 class="main-title">VetMyPet - AI Animal Health & Diagnostic Platform</h1>
-  <div class="sub-title">An End-to-End Multimodal Video, Vision & Clinical Decision Support System</div>
+  <span class="title-tag">System Architecture & Technical Specification Whitepaper</span>
+  <h1 class="main-title">PashuRakshak (पशुरक्षक) - Animal Health & Outbreak Surveillance Platform</h1>
+  <div class="sub-title">An End-to-End Clinical Screening, Geospatial Outbreak Sensing & Coordinated Epidemic Defense System</div>
   
-  <div class="meta-grid">
-    <div class="meta-item">
-      <strong>Platform Version</strong>
-      <span>v2.5.0 (Production Core)</span>
-    </div>
-    <div class="meta-item">
-      <strong>Core Backend</strong>
-      <span>Go 1.22+ / SQLite WAL</span>
-    </div>
-    <div class="meta-item">
-      <strong>Clinical AI Model</strong>
-      <span>viggovet/viggoVet-Reasoning-20B</span>
-    </div>
-    <div class="meta-item">
-      <strong>Generated Date</strong>
-      <span>August 2026</span>
-    </div>
-  </div>
+  <table border="1" cellspacing="0" cellpadding="4" bordercolor="#cbd5e1" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="width: 25%; background-color: #f8fafc;">
+        <strong style="color: #0f172a; display: block; font-size: 7.5pt;">Problem Statement ID</strong>
+        <span style="color: #64748b; font-size: 7.5pt;">PS 26128 (Govt of Maharashtra & MSIS)</span>
+      </td>
+      <td style="width: 25%; background-color: #f8fafc;">
+        <strong style="color: #0f172a; display: block; font-size: 7.5pt;">Platform Core</strong>
+        <span style="color: #64748b; font-size: 7.5pt;">Go 1.22+ / Triple SQLite WAL</span>
+      </td>
+      <td style="width: 25%; background-color: #f8fafc;">
+        <strong style="color: #0f172a; display: block; font-size: 7.5pt;">Clinical Decision Engine</strong>
+        <span style="color: #64748b; font-size: 7.5pt;">Qwen2.5-VL & viggoVet-Reasoning-20B</span>
+      </td>
+      <td style="width: 25%; background-color: #f8fafc;">
+        <strong style="color: #0f172a; display: block; font-size: 7.5pt;">Document Edition</strong>
+        <span style="color: #64748b; font-size: 7.5pt;">v4.1.0 Production Whitepaper</span>
+      </td>
+    </tr>
+  </table>
 </div>
 
-<!-- 1. Executive Summary -->
-<h2>1. Executive Summary & System Overview</h2>
-<p>
-The <strong>VetMyPet - AI Animal Health & Diagnostic Platform</strong> is a full-stack, multimodal clinical decision support system engineered for veterinary practitioners, veterinary technicians, agricultural livestock managers, and companion animal owners. The system ingests high-resolution still photographs and temporal live video recordings (e.g. motion, involuntary spasms, chorea, gait abnormalities, respiratory distress), extracts sequential keyframes, conducts objective computer vision inspection, and synthesizes visual evidence with owner-reported clinical history using specialized Large Multimodal Models (LMMs).
-</p>
-<p>
-Unlike conventional veterinary AI classifiers that rigidly classify dermatology lesions or force single disease predictions, this platform operates on an <strong>unbiased, broad-spectrum differential diagnosis framework</strong>. It evaluates infectious (viral, bacterial, fungal, parasitic), non-infectious (mechanical obstructions, toxicological, inflammatory, metabolic, traumatic), and behavioral presentations across canine, feline, bovine, equine, caprine, ovine, and avian species using <code>viggovet/viggoVet-Reasoning-20B</code> for veterinary clinical reasoning.
-</p>
-
-<!-- 2. Problem Statement -->
-<h2>2. Problem Statement & Key Industry Challenges</h2>
-<p>Veterinary triage and diagnostics face significant operational and technical hurdles:</p>
-<ul>
-  <li><strong>The Static Image Diagnostic Blindspot:</strong> Many life-threatening veterinary conditions cannot be diagnosed from a single static photograph. For example, <em>Canine Distemper Virus (CDV)</em> presents with rhythmic chorea/myoclonus (jaw and leg twitching), <em>Equine Colic</em> presents with dynamic visceral pain (ground pawing, flank watching, rolling), and <em>Rabies</em> presents with behavioral agitation or ataxia. These require motion analysis across temporal video frames.</li>
-  <li><strong>Classifier Bias & False Positives:</strong> Traditional image classification models are trained on narrow dermatological datasets, frequently misclassifying critical systemic emergency conditions (e.g. Parvovirus, Distemper, AHDS) as superficial skin pyoderma or forcing predetermined diseases.</li>
-  <li><strong>Data Integrity & Concurrency Lockouts:</strong> In embedded database deployments (e.g. SQLite in veterinary clinics and field laptops), continuous automated snapshot backups frequently trigger <code>database is locked</code> errors during write-heavy clinical screening workflows.</li>
-  <li><strong>Auth Header & API Token Collisions:</strong> In multi-tier architectures, forwarding user login bearer tokens into third-party AI provider headers triggers HTTP 401/403 authorization rejections.</li>
-</ul>
-
-<!-- 3. Our Solution -->
-<h2>3. Our Solution & Core Innovations</h2>
-
-<div class="card-grid">
-  <div class="card">
-    <div class="card-header">🎬 Multimodal Video & Keyframe Pipeline</div>
-    <p style="font-size: 8.5pt; color: #475569; margin: 0;">
-      In-browser camera recording (<code>MediaRecorder</code>) and file upload (.mp4, .webm, .mov) with automated <code>ffmpeg</code> temporal sampling extracting 4 evenly-spaced keyframes across timeline adhering to AI router quotas.
-    </p>
-  </div>
-  <div class="card">
-    <div class="card-header">🧠 Dual-Stage Multimodal AI Pipeline</div>
-    <p style="font-size: 8.5pt; color: #475569; margin: 0;">
-      Strict separation of concerns: Stage 1 (<code>Qwen2.5-VL-72B-Instruct</code>) performs purely objective visual/motion extraction; Stage 2 (<code>viggovet/viggoVet-Reasoning-20B</code>) executes specialized veterinary internal medicine reasoning.
-    </p>
-  </div>
-  <div class="card">
-    <div class="card-header">🔒 Dual-Database & Point-in-Time Backups</div>
-    <p style="font-size: 8.5pt; color: #475569; margin: 0;">
-      Dedicated <code>user.db</code> (Bcrypt password hashing, token auth) and <code>animal_health.db</code> (records, media, screenings) with automatic <code>VACUUM INTO</code> point-in-time snapshot rotation upon every database mutation.
-    </p>
-  </div>
-  <div class="card">
-    <div class="card-header">⚡ Lock-Free SQLite Concurrency</div>
-    <p style="font-size: 8.5pt; color: #475569; margin: 0;">
-      WAL mode with <code>_busy_timeout=10000</code>, <code>PRAGMA busy_timeout = 10000;</code>, and serialized write pooling (<code>SetMaxOpenConns(1)</code>) completely eliminating lock contention during simultaneous auto-backups.
-    </p>
-  </div>
+<!-- 1. Problem Statement Alignment -->
+<h2>1. Problem Statement Alignment (PS ID 26128)</h2>
+<div class="callout info">
+  <div class="callout-title">🏛️ Official Problem Statement 26128 &bull; Government of Maharashtra & MSIS</div>
+  <p style="margin: 0; font-size: 7.6pt; line-height: 1.35;">
+    <strong>Title:</strong> Efficient systems for early detection, prevention, and management of livestock diseases and animal health issues<br>
+    <strong>Description:</strong> Livestock owners, field veterinarians, para-veterinary workers and government departments often lack a unified, realtime mechanism to identify emerging animal-health risks at the village, block and district levels. Disease symptoms may be reported late, diagnostic facilities may be distant, vaccination and treatment histories may be incomplete, and information from farms, veterinary dispensaries, laboratories, vaccination drives and surveillance programmes may remain fragmented. These gaps can delay containment, increase livestock mortality and productivity loss, raise the risk of zoonotic transmission, and affect farmers’ incomes. The challenge is to create a practical system that enables early warning, rapid reporting, risk assessment, preventive action, referral and coordinated response.
+  </p>
 </div>
+<p>
+The <strong>PashuRakshak (पशुरक्षक)</strong> platform is engineered as a direct solution to this mandate, uniting dairy farmers, pastoralists, licensed veterinary doctors, dispensaries, NGOs, and state animal husbandry authorities into an interconnected, real-time epidemiological grid.
+</p>
 
-<div class="page-break"></div>
+<!-- 2. Multi-Role Ecosystem & Geospatial Entity Mapping -->
+<h2>2. Multi-Role Ecosystem & Geospatial Entity Mapping</h2>
+<p>
+To address fragmentation between field workers and clinical facilities, the platform partitions functionality across four primary user classes:
+</p>
 
-<!-- 4. Complete Tech Stack -->
-<h2>4. Complete Technology Stack & Specifications</h2>
-
-<table>
-  <thead>
-    <tr>
-      <th style="width: 20%;">Tier / Component</th>
-      <th style="width: 30%;">Technologies & Libraries</th>
-      <th style="width: 50%;">Functional Responsibility</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>Frontend Layer</strong></td>
-      <td>
-        <span class="badge badge-blue">React 18</span>
-        <span class="badge badge-blue">Vite SPA</span>
-        <span class="badge badge-blue">Tailwind CSS</span>
-        <span class="badge badge-blue">Lucide Icons</span>
-      </td>
-      <td>
-        Single-page web application featuring responsive dark/light interface, live camera video capture, drag-and-drop media upload, triage visualization, and patient records management.
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Client APIs & Capture</strong></td>
-      <td>
-        <code>MediaRecorder API</code><br>
-        <code>Navigator.mediaDevices</code><br>
-        <code>Fetch API</code>
-      </td>
-      <td>
-        In-browser 5–12s gait/spasm video recording, live video preview playback, audio/video stream constraints, and custom header injection (<code>X-Auth-Token</code>, <code>X-User-ID</code>).
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Backend Core</strong></td>
-      <td>
-        <span class="badge badge-green">Go 1.22+</span>
-        <code>net/http</code><br>
-        <code>golang.org/x/crypto/bcrypt</code>
-      </td>
-      <td>
-        High-throughput REST API server, custom middleware pipeline (CORS, Token Auth, Request Logging), and asynchronous backup event dispatchers.
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Media Engine</strong></td>
-      <td>
-        <span class="badge badge-amber">FFmpeg 6.0+</span><br>
-        <code>ffprobe</code>
-      </td>
-      <td>
-        Video stream validation, duration probing, temporal filter-graph scaling (<code>fps=1/2,scale=512:-1</code>), and 4-frame JPEG base64 extraction.
-      </td>
-    </tr>
-    <tr>
-      <td><strong>Databases & Storage</strong></td>
-      <td>
-        <span class="badge badge-purple">SQLite 3 (WAL)</span><br>
-        <code>mattn/go-sqlite3</code>
-      </td>
-      <td>
-        Two isolated databases: <code>user.db</code> (authentication, credentials, salt/hashes) and <code>animal_health.db</code> (patients, media metadata, clinical screenings, reminders).
-      </td>
-    </tr>
-    <tr>
-      <td><strong>AI Inference Layer</strong></td>
-      <td>
-        <code>Qwen2.5-VL-72B-Instruct</code><br>
-        <code>viggovet/viggoVet-Reasoning-20B</code><br>
-        Hugging Face Router API
-      </td>
-      <td>
-        Multimodal visual analysis on keyframe arrays, followed by structured veterinary clinical assessment, differential ranking, confirmatory test prescription, and triage urgency rating.
-      </td>
-    </tr>
-  </tbody>
+<table border="1" cellspacing="0" cellpadding="4" bordercolor="#cbd5e1" style="width: 100%; border-collapse: collapse;">
+  <tr>
+    <td style="width: 50%; background-color: #ffffff;">
+      <strong style="color: #065f46; font-size: 8pt; display: block; margin-bottom: 2px;">🚜 Livestock Farmers & Dairy Owners (<code>farmer</code>)</strong>
+      <span style="font-size: 7.4pt; color: #475569;">
+        Registers farm name, village (गावाचे नाव), taluka, district, livestock types (Cattle, Buffalo, Goat, Sheep, Poultry, Swine), and herd size. Features livestock video/photo screening, real-time outbreak SOS radar, recovery reporting (<code>POST /api/outbreaks/report-recovery</code>), and nearby clinic directory.
+      </span>
+    </td>
+    <td style="width: 50%; background-color: #ffffff;">
+      <strong style="color: #065f46; font-size: 8pt; display: block; margin-bottom: 2px;">🐾 Companion Pet Parents (<code>pet_owner</code>)</strong>
+      <span style="font-size: 7.4pt; color: #475569;">
+        Registers address, city, district, and pincode. Features instant lesion & motion gait screening, broad-spectrum contagion alerts (e.g. Canine Parvovirus, Feline Panleukopenia), and one-tap doctor second-opinion requests.
+      </span>
+    </td>
+  </tr>
+  <tr>
+    <td style="width: 50%; background-color: #ffffff;">
+      <strong style="color: #065f46; font-size: 8pt; display: block; margin-bottom: 2px;">🩺 Licensed Veterinarians & Clinics (<code>vet</code>)</strong>
+      <span style="font-size: 7.4pt; color: #475569;">
+        Dedicated Doctor Decision Hub: Case Review Queue to inspect doubtful screenings, verify diagnoses, issue ℞ prescriptions, manage live clinic operating hours, broadcast current field visiting locations, and post leave notices.
+      </span>
+    </td>
+    <td style="width: 50%; background-color: #ffffff;">
+      <strong style="color: #065f46; font-size: 8pt; display: block; margin-bottom: 2px;">📦 NGOs & Government Dispensaries (<code>ngo</code> / <code>gov</code>)</strong>
+      <span style="font-size: 7.4pt; color: #475569;">
+        Real-time emergency inventory management for critical vaccines (FMD, Lumpy Skin, PPR), broad-spectrum antibiotics, antiseptics, and PPE kits with automated low-stock warnings and official circular broadcasting.
+      </span>
+    </td>
+  </tr>
 </table>
 
-<!-- 5. Architecture & Pipeline Flow -->
-<h2>5. End-to-End System Architecture & Data Pipelines</h2>
+<!-- 3. Dynamic Outbreak Sensing & Resolution Engine -->
+<h2>3. Dynamic Outbreak Sensing, Vet Consensus & Resolution Engine</h2>
+<table border="1" cellspacing="0" cellpadding="4" bordercolor="#cbd5e1" style="width: 100%; border-collapse: collapse;">
+  <tr>
+    <td style="width: 50%; background-color: #ffffff;">
+      <strong style="color: #991b1b; font-size: 8pt; display: block; margin-bottom: 2px;">🚨 Rule 1: Veterinarian Consensus Trigger</strong>
+      <span style="font-size: 7.4pt; color: #475569;">
+        When <strong>3 or more (&ge; 3)</strong> licensed veterinarians confirm the same infectious disease (e.g. FMD, Lumpy Skin, PPR, Parvo, Anthrax) within a district, the system automatically flags a <strong>Verified Outbreak</strong> (<code>status = 'active'</code>, <code>severity = 'CRITICAL'</code>) and dispatches district-wide SOS alerts.
+      </span>
+    </td>
+    <td style="width: 50%; background-color: #ffffff;">
+      <strong style="color: #065f46; font-size: 8pt; display: block; margin-bottom: 2px;">🚜 Rule 2: Farmer Clustering Trigger</strong>
+      <span style="font-size: 7.4pt; color: #475569;">
+        When <strong>3 or more (&ge; 3)</strong> farmers in the same locality or taluka report matching clinical symptoms via multimodal scans or consult requests, an active outbreak cluster is automatically formed with actionable biosecurity protocols.
+      </span>
+    </td>
+  </tr>
+</table>
 
-<div class="diagram-box">
-+---------------------------------------------------------------------------------------------------------+
-|                                        FRONTEND CLIENT (React 18 SPA)                                   |
-|   [Photo Capture / File Drag-Drop]    [In-Browser Video Recorder (MediaRecorder)]    [Symptoms Form]    |
-+----------------------------------------------------+----------------------------------------------------+
-                                                     |
-                    Multipart POST /api/health-check/upload (Headers: X-Auth-Token, X-User-ID)
-                                                     v
-+---------------------------------------------------------------------------------------------------------+
-|                                    BACKEND INGESTION & STORAGE ENGINE                                   |
-|   1. MIME & Size Validation (.jpg, .png, .mp4, .webm, .mov)                                             |
-|   2. Content-Addressable Storage Write -> ./uploads/{hash}.ext                                          |
-|   3. Register Media Record in animal_health.db (Type: 'video' | 'image')                                |
-+----------------------------------------------------+----------------------------------------------------+
-                                                     |
-                       POST /api/health-check/analyze { media_id: 11, symptoms: [...] }
-                                                     v
-+---------------------------------------------------------------------------------------------------------+
-|                                  TEMPORAL KEYFRAME EXTRACTION (FFmpeg)                                  |
-|   If video -> ffmpeg -y -i input.webm -vf "fps=1/2,scale=512:-1" -vframes 4 frame_%03d.jpg             |
-|   Collect 4 base64 data URLs: ["data:image/jpeg;base64,...", "data:image/jpeg;base64,..."]             |
-+----------------------------------------------------+----------------------------------------------------+
-                                                     |
-                     Payload: 4 Image Data URLs + Unbiased Objective Inspection Prompt
-                                                     v
-+---------------------------------------------------------------------------------------------------------+
-|                             STAGE 1: MULTIMODAL COMPUTER VISION AI                                      |
-|                             Model: Qwen/Qwen2.5-VL-72B-Instruct (Vision)                                |
-|   Outputs JSON: species, posture, visible lesions, discharges, wounds, gait/chorea, behavior, severity |
-+----------------------------------------------------+----------------------------------------------------+
-                                                     |
-                     Payload: Species + Vision Findings + Clinical Complaints / History
-                                                     v
-+---------------------------------------------------------------------------------------------------------+
-|                           STAGE 2: VETERINARY INTERNAL MEDICINE REASONING                               |
-|                           Model: viggovet/viggoVet-Reasoning-20B (Clinical Specialist)                  |
-|   Outputs JSON: 4-5 ranked differentials, pathophysiological reasons, confirmatory tests, triage urgency|
-+----------------------------------------------------+----------------------------------------------------+
-                                                     |
-                         Persistence & Automated Backup Event Hook (OnChange)
-                                                     v
-+----------------------------------------------------+----------------------------------------------------+
-|                         DATABASE PERSISTENCE & ASYNC BACKUP ENGINE                                      |
-|   1. Auto-resolve & persist Animal Record (linked to authenticated User)                                |
-|   2. Insert Health Screening Record in animal_health.db                                                 |
-|   3. Trigger OnChange() -> Asynchronous Snapshot Backup via VACUUM INTO -> ./backups/{timestamp}.db     |
-+----------------------------------------------------+----------------------------------------------------+
-                                                     |
-                                JSON Response (HTTP 201 Created) -> Render Results in UI
+<div class="callout warning">
+  <div class="callout-title">🔄 Dynamic Outbreak Resolution Lifecycle</div>
+  <p style="margin: 0; font-size: 7.6pt;">
+    <strong>Recovery Reporting:</strong> Farmers or paravets submit recovery counts (<code>POST /api/outbreaks/report-recovery</code>). Active affected counts decrement dynamically.<br>
+    <strong>Containment Clearance:</strong> When affected counts reach 0 or when veterinarians issue an official resolution certificate (<code>POST /api/outbreaks/resolve</code>), the outbreak transitions to <code>status = 'resolved'</code>, <code>severity = 'RESOLVED'</code>, the active red SOS flag is cleared, and an all-clear resolution notice is broadcast across the district.
+  </p>
 </div>
 
 <div class="page-break"></div>
 
-<!-- 6. Detailed Pipeline Breakdown -->
-<h2>6. Detailed In-Depth Pipeline Mechanics</h2>
+<!-- ==================== PAGE 2 ==================== -->
 
-<h3>6.1. Temporal Video Keyframe Extraction & Quota Compliance</h3>
+<!-- 4. End-to-End System Architecture & Data Flow -->
+<h2 style="page-break-before: always;">4. End-to-End Architecture & Data Flow</h2>
+
+<table border="1" cellspacing="0" cellpadding="4" bordercolor="#cbd5e1" style="width: 100%; border-collapse: collapse; margin: 6px 0;">
+  <tr>
+    <td colspan="3" style="background-color: #064e3b; color: #ffffff; padding: 6px; text-align: center; font-weight: bold; font-size: 8.5pt;">
+      🌐 PASHURAKSHAK FRONTEND CLIENT (React 18 / Tailwind CSS)
+      <div style="font-weight: normal; font-size: 7.2pt; color: #a7f3d0; margin-top: 1px;">
+        [Farmers: Herd Screening & Outbreak Radar] &bull; [Vets: Decision Hub & Pashu Aadhaar Search] &bull; [Dispensaries: Vaccine Stock Grid]
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="3" style="background-color: #f0fdf4; color: #065f46; padding: 3px; text-align: center; font-size: 7.2pt; border: 1px solid #cbd5e1;">
+      ⬇️ REST API (JSON &bull; Multipart/form-data &bull; X-Auth-Token Header) ⬇️
+    </td>
+  </tr>
+  <tr>
+    <td colspan="3" style="background-color: #0f172a; color: #f8fafc; padding: 6px; text-align: center; font-weight: bold; font-size: 8.5pt;">
+      ⚙️ GO HIGH-PERFORMANCE BACKEND SERVICE (Go 1.22+ &bull; CGO &bull; net/http)
+      <div style="font-weight: normal; font-size: 7.2pt; color: #94a3b8; margin-top: 1px;">
+        Bcrypt Authentication &bull; Outbreak Cluster Consensus Engine &bull; FFmpeg 4-Frame Temporal Keyframe Extractor
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <td style="width: 33.3%; background-color: #f8fafc; vertical-align: top;">
+      <strong style="color: #065f46; font-size: 7.8pt; display: block; margin-bottom: 2px;">📁 Media Engine</strong>
+      <div style="font-size: 7pt; color: #475569;">
+        &bull; Content-Addressable Storage<br>
+        &bull; FFmpeg 4-Frame Video Ingestion<br>
+        &bull; Temporal Gait & Lesion Slices
+      </div>
+    </td>
+    <td style="width: 33.3%; background-color: #f8fafc; vertical-align: top;">
+      <strong style="color: #065f46; font-size: 7.8pt; display: block; margin-bottom: 2px;">🧠 Clinical Decision Engine</strong>
+      <div style="font-size: 7pt; color: #475569;">
+        &bull; Visual Analysis (Qwen2.5-VL)<br>
+        &bull; Differential Reasoning (viggoVet)<br>
+        &bull; 4-Level Emergency Triage
+      </div>
+    </td>
+    <td style="width: 33.3%; background-color: #f8fafc; vertical-align: top;">
+      <strong style="color: #065f46; font-size: 7.8pt; display: block; margin-bottom: 2px;">🚨 Surveillance & Consensus</strong>
+      <div style="font-size: 7pt; color: #475569;">
+        &bull; Vet Consensus &ge; 3 Trigger<br>
+        &bull; Farmer Cluster &ge; 3 Trigger<br>
+        &bull; Dynamic Recovery Clearance
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="3" style="background-color: #f1f5f9; color: #334155; padding: 3px; text-align: center; font-size: 7.2pt; border: 1px solid #cbd5e1;">
+      ⬇️ Zero Lock-Contention WAL Persistence ⬇️
+    </td>
+  </tr>
+  <tr>
+    <td style="background-color: #ffffff; vertical-align: top;">
+      <strong style="color: #0f172a; font-size: 7.8pt;">🗄️ user.db (v4)</strong>
+      <div style="font-size: 7pt; color: #64748b;">
+        Users, Roles, Bcrypt Auth, 30-Day Sessions, Clinic Hours & Visiting Locations
+      </div>
+    </td>
+    <td style="background-color: #ffffff; vertical-align: top;">
+      <strong style="color: #0f172a; font-size: 7.8pt;">🗄️ animal_health.db (v5)</strong>
+      <div style="font-size: 7pt; color: #64748b;">
+        Pashu Aadhaar 12-Digit Tags, Health Passports, Doctor Lab Results, Screenings
+      </div>
+    </td>
+    <td style="background-color: #ffffff; vertical-align: top;">
+      <strong style="color: #0f172a; font-size: 7.8pt;">🗄️ surveillance.db (v2)</strong>
+      <div style="font-size: 7pt; color: #64748b;">
+        Outbreak Clusters, SOS Alerts, Doctor Review Queue, Vaccine Supplies, Circulars
+      </div>
+    </td>
+  </tr>
+</table>
+
+<!-- 5. Multi-Database Architecture -->
+<h2>5. Triple SQLite Schema Architecture & Data Flow Isolation</h2>
 <p>
-Modern Multimodal LLM endpoints (e.g. Hugging Face Router for <code>Qwen2.5-VL-72B-Instruct</code>) enforce strict limits of <strong>at most 5 images per request prompt</strong>. Videos recorded in browsers or uploaded from phones often contain hundreds of frames at 30–60 FPS.
-</p>
-<p>
-The backend implements adaptive temporal sampling in <code>backend/internal/ai/providers.go</code>:
-</p>
-<pre><code>// Extract 4 representative temporal keyframes across the video using ffmpeg
-// Enforces max 5 image quota constraint on the multimodal inference router
-cmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-i", cleanPath, 
-    "-vf", "fps=1/2,scale=512:-1", "-vframes", "4", framePattern)
-if err := cmd.Run(); err == nil {
-    files, _ := filepath.Glob(filepath.Join(tmpDir, "frame_*.jpg"))
-    sort.Strings(files)
-    for _, f := range files {
-        data, _ := os.ReadFile(f)
-        frames = append(frames, "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(data))
-        if len(frames) >= 4 { break }
-    }
-}</code></pre>
-
-<h3>6.2. Unbiased Dual-Stage Clinical AI Reasoning</h3>
-<p>
-To ensure the AI evaluates cases on a true medical spectrum without artificial disease hallucinations or forced diagnoses:
-</p>
-<ul>
-  <li><strong>Stage 1 (Vision):</strong> Strictly extracts physical abnormalities (e.g. *"lateral recumbency, bandaged right front paw, fluid/hematochezia stain near perineum, no voluntary movement"*). No disease names are injected into the prompt.</li>
-  <li><strong>Stage 2 (Veterinary Reasoning):</strong> Evaluates evidence across infectious (viral, bacterial, parasitic), mechanical (foreign bodies, obstructions), toxicological, inflammatory, and metabolic categories using <code>viggovet/viggoVet-Reasoning-20B</code>.</li>
-</ul>
-
-<div class="callout info">
-  <div class="callout-title">💡 Unbiased Diagnostic Guidelines (System Prompt)</div>
-  "1. UNBIASED EVALUATION: Formulate differentials based purely on patient species, reported complaints, and visual findings.<br>
-  2. COMPREHENSIVE SPECTRUM: Systematically consider all relevant etiologies across infectious (viral, bacterial, fungal, parasitic), mechanical/surgical (obstructions, trauma), toxicological, inflammatory, and metabolic disorders.<br>
-  3. EVIDENCE-BASED RANKING: Provide 4-5 differential diagnoses ranked by true clinical likelihood with pathophysiological reasoning.<br>
-  4. DIAGNOSTIC WORKUP & TRIAGE: Recommend specific confirmatory lab tests, imaging modalities, and immediate emergency management."
-</div>
-
-<h3>6.3. Concurrency Resilience & Lock-Free SQLite WAL Setup</h3>
-<p>
-To allow concurrent read operations, write operations, and background snapshot auto-backups without <code>database is locked</code> exceptions, the SQLite connections are configured with explicit busy timeouts and single-writer pooling:
-</p>
-<pre><code>// Connection string with busy timeout and WAL journal mode
-db, err := sql.Open("sqlite3", path + "?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=10000")
-db.SetMaxOpenConns(1)
-db.Exec(`PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 10000;`)</code></pre>
-
-<!-- 7. Database Schemas & Migrations -->
-<h2>7. Database Schemas & Migration Architecture</h2>
-<p>
-The platform manages two segregated SQLite databases with automated versioned migrations applied on every server startup:
+To ensure fault isolation and prevent surveillance queries from competing with clinic authentication, storage is split into three independent SQLite databases running in Write-Ahead Logging (WAL) mode:
 </p>
 
-<table>
+<table border="1" cellspacing="0" cellpadding="3.5" bordercolor="#cbd5e1" style="width: 100%; border-collapse: collapse;">
   <thead>
     <tr>
-      <th style="width: 22%;">Database</th>
-      <th style="width: 25%;">Table Name</th>
-      <th style="width: 53%;">Columns & Structural Schema</th>
+      <th style="width: 18%;">Database & Engine</th>
+      <th style="width: 22%;">Table Name</th>
+      <th style="width: 60%;">Schema Structure & Key Indexes</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td rowspan="2"><strong><code>user.db</code></strong><br><small>Authentication & Security</small></td>
+      <td rowspan="4"><strong><code>user.db</code></strong><br><small>Schema v4 (WAL)</small></td>
       <td><code>users</code></td>
-      <td><code>id (PK)</code>, <code>email (UNIQUE)</code>, <code>password_hash (Bcrypt)</code>, <code>full_name</code>, <code>role</code>, <code>created_at</code>, <code>updated_at</code></td>
+      <td><code>id (PK)</code>, <code>name</code>, <code>email (UNIQUE)</code>, <code>password_hash</code>, <code>role</code>, <code>district</code>, <code>clinic_name</code>, <code>is_available</code>, <code>visiting_location</code>, <code>leave_notes</code>, <code>created_at</code></td>
     </tr>
     <tr>
-      <td><code>schema_migrations</code></td>
-      <td><code>version (PK)</code>, <code>name</code>, <code>applied_at</code></td>
+      <td><code>sessions</code></td>
+      <td><code>token (PK)</code>, <code>user_id (INDEX)</code>, <code>role</code>, <code>expires_at</code>, <code>created_at</code></td>
     </tr>
     <tr>
-      <td rowspan="5"><strong><code>animal_health.db</code></strong><br><small>Clinical Application Data</small></td>
+      <td><code>user_profiles</code></td>
+      <td><code>user_id (PK)</code>, <code>farm_name</code>, <code>herd_size</code>, <code>village</code>, <code>taluka</code>, <code>district</code>, <code>clinic_hours</code>, <code>updated_at</code></td>
+    </tr>
+    <tr>
+      <td><code>audit_logs</code></td>
+      <td><code>id (PK)</code>, <code>user_id</code>, <code>email</code>, <code>event</code>, <code>ip_address</code>, <code>details</code>, <code>created_at</code></td>
+    </tr>
+    <tr>
+      <td rowspan="4"><strong><code>animal_health.db</code></strong><br><small>Schema v5 (WAL)</small></td>
       <td><code>animals</code></td>
-      <td><code>id (PK)</code>, <code>user_id (INDEX)</code>, <code>name</code>, <code>species</code>, <code>breed</code>, <code>age</code>, <code>sex</code>, <code>photo_url</code>, <code>notes</code>, <code>weight</code>, <code>created_at</code></td>
-    </tr>
-    <tr>
-      <td><code>media</code></td>
-      <td><code>id (PK)</code>, <code>url</code>, <code>path</code>, <code>type</code> ('image'|'video'), <code>mime_type</code>, <code>size</code>, <code>created_at</code></td>
+      <td><code>id (PK)</code>, <code>user_id</code>, <code>name</code>, <code>species</code>, <code>breed</code>, <code>age</code>, <code>sex</code>, <code>tag_number</code> (12-digit Pashu Aadhaar), <code>herd_size</code>, <code>village</code>, <code>taluka</code>, <code>district</code>, <code>photo_url</code>, <code>notes</code>, <code>weight</code>, <code>created_at</code></td>
     </tr>
     <tr>
       <td><code>health_screenings</code></td>
-      <td><code>id (PK)</code>, <code>animal_id (INDEX)</code>, <code>media_url</code>, <code>media_type</code>, <code>symptoms_json</code>, <code>visual_analysis_json</code>, <code>assessment_json</code>, <code>urgency (INDEX)</code>, <code>created_at (INDEX)</code></td>
+      <td><code>id (PK)</code>, <code>animal_id</code>, <code>user_id</code>, <code>media_url</code>, <code>symptoms_json</code>, <code>visual_analysis_json</code>, <code>assessment_json</code>, <code>urgency</code>, <code>district</code>, <code>taluka</code>, <code>farm_name</code>, <code>vet_review_requested</code>, <code>created_at</code></td>
+    </tr>
+    <tr>
+      <td><code>clinic_test_results</code></td>
+      <td><code>id (PK)</code>, <code>animal_id</code>, <code>user_id</code> (owner), <code>vet_id</code>, <code>vet_name</code>, <code>clinic_name</code>, <code>test_type</code>, <code>sample_date</code>, <code>test_parameters_json</code>, <code>interpretation</code>, <code>status</code> ('Normal'|'Abnormal'|'Critical'), <code>recommendation</code>, <code>created_at</code></td>
     </tr>
     <tr>
       <td><code>reminders</code></td>
-      <td><code>id (PK)</code>, <code>user_id (INDEX)</code>, <code>animal_id</code>, <code>type</code>, <code>title</code>, <code>description</code>, <code>due_at</code>, <code>completed</code>, <code>created_at</code></td>
+      <td><code>id (PK)</code>, <code>user_id</code>, <code>animal_id</code>, <code>type</code>, <code>title</code>, <code>description</code>, <code>due_at</code>, <code>completed</code>, <code>created_at</code></td>
     </tr>
     <tr>
-      <td><code>schema_migrations</code></td>
-      <td><code>version (PK)</code>, <code>name</code>, <code>applied_at</code></td>
+      <td rowspan="5"><strong><code>surveillance.db</code></strong><br><small>Schema v2 (WAL)</small></td>
+      <td><code>outbreaks</code></td>
+      <td><code>id (PK)</code>, <code>disease_name</code>, <code>species</code>, <code>district</code>, <code>taluka</code>, <code>village</code>, <code>farm_name</code>, <code>affected_count</code>, <code>severity</code>, <code>prevention_guide</code>, <code>status</code> ('active'|'contained'|'resolved'), <code>verified_by_vets</code>, <code>reported_by_farmers</code>, <code>resolution_notes</code>, <code>resolved_at</code>, <code>created_at</code></td>
+    </tr>
+    <tr>
+      <td><code>notifications</code></td>
+      <td><code>id (PK)</code>, <code>user_id</code>, <code>role_target</code> ('all'|'farmer'|'vet'|'ngo'), <code>district</code>, <code>title</code>, <code>message</code>, <code>outbreak_id</code>, <code>severity</code>, <code>is_sos</code>, <code>read</code>, <code>action_url</code>, <code>created_at</code></td>
+    </tr>
+    <tr>
+      <td><code>vet_consultations</code></td>
+      <td><code>id (PK)</code>, <code>screening_id</code>, <code>user_id</code>, <code>user_name</code>, <code>user_role</code>, <code>user_phone</code>, <code>location</code>, <code>vet_id</code>, <code>vet_name</code>, <code>animal_name</code>, <code>species</code>, <code>breed</code>, <code>media_url</code>, <code>symptoms_json</code>, <code>owner_notes</code>, <code>ai_diagnosis</code>, <code>ai_urgency</code>, <code>vet_diagnosis</code>, <code>vet_suggestion</code>, <code>vet_prescriptions</code>, <code>status</code> ('pending'|'reviewed'), <code>created_at</code></td>
+    </tr>
+    <tr>
+      <td><code>inventories</code></td>
+      <td><code>id (PK)</code>, <code>user_id</code>, <code>owner_name</code>, <code>org_type</code>, <code>district</code>, <code>item_name</code>, <code>category</code>, <code>quantity</code>, <code>unit</code>, <code>min_threshold</code>, <code>expiry_date</code>, <code>status</code>, <code>updated_at</code></td>
+    </tr>
+    <tr>
+      <td><code>gov_advisories</code></td>
+      <td><code>id (PK)</code>, <code>issuer</code>, <code>title</code>, <code>content</code>, <code>district</code>, <code>category</code>, <code>urgency</code>, <code>date_issued</code>, <code>created_at</code></td>
     </tr>
   </tbody>
 </table>
 
 <div class="page-break"></div>
 
-<!-- 8. API Specification -->
-<h2>8. RESTful API Endpoint Specifications</h2>
+<!-- ==================== PAGE 3 ==================== -->
 
-<table>
+<!-- 6. Complete RESTful API Specifications -->
+<h2 style="page-break-before: always;">6. Complete RESTful API Specifications</h2>
+
+<table border="1" cellspacing="0" cellpadding="2.5" bordercolor="#cbd5e1" style="width: 100%; border-collapse: collapse;">
   <thead>
     <tr>
-      <th style="width: 15%;">Method & Path</th>
-      <th style="width: 25%;">Headers & Parameters</th>
-      <th style="width: 60%;">Description & Payload Structure</th>
+      <th style="width: 24%;">Method & Path</th>
+      <th style="width: 22%;">Headers & Params</th>
+      <th style="width: 54%;">Description & Payload Architecture</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td><code>POST /api/auth/register</code></td>
-      <td><code>Content-Type: application/json</code></td>
-      <td>Registers a new user account with Bcrypt password hashing (Cost 10).<br>
-      Payload: <code>{ "email": "...", "password": "...", "full_name": "..." }</code></td>
+      <td><code>Content-Type: json</code></td>
+      <td>Registers account with role (<code>farmer</code>, <code>pet_owner</code>, <code>vet</code>, <code>ngo</code>) and geo fields.</td>
     </tr>
     <tr>
       <td><code>POST /api/auth/login</code></td>
-      <td><code>Content-Type: application/json</code></td>
-      <td>Authenticates credentials against <code>user.db</code> and issues session token.<br>
-      Response: <code>{ "token": "...", "user": { "id": 1, "email": "..." } }</code></td>
+      <td><code>Content-Type: json</code></td>
+      <td>Authenticates credentials with Bcrypt verification; issues 30-day session token.</td>
     </tr>
     <tr>
-      <td><code>POST /api/auth/logout</code></td>
-      <td><code>X-Auth-Token: &lt;token&gt;</code></td>
-      <td>Invalidates active user session token.</td>
+      <td><code>POST /api/auth/profile</code></td>
+      <td><code>X-Auth-Token</code></td>
+      <td>Updates profile, farm parameters, or veterinarian duty status & leave notices.</td>
     </tr>
     <tr>
-      <td><code>POST /api/health-check/upload</code></td>
-      <td><code>Content-Type: multipart/form-data</code><br><code>X-Auth-Token</code>, <code>X-User-ID</code></td>
-      <td>Uploads image or video file. Validates MIME type, stores file in <code>./uploads/</code>, and registers record in <code>media</code> table.<br>
-      Response: <code>{ "id": 11, "url": "/uploads/...", "type": "video", "size": 1938155 }</code></td>
+      <td><code>GET /api/vets</code></td>
+      <td><code>?district=Pune</code></td>
+      <td>Returns directory of licensed veterinarians with real-time duty status and clinic hours.</td>
     </tr>
     <tr>
       <td><code>POST /api/health-check/analyze</code></td>
-      <td><code>Content-Type: application/json</code><br><code>X-Auth-Token</code>, <code>X-User-ID</code></td>
-      <td>Executes full multimodal visual inspection and veterinary differential assessment.<br>
-      Payload: <code>{ "media_id": 11, "symptoms": { "symptoms": [...], "other": "..." } }</code><br>
-      Response: Full structured JSON with visual analysis, assessment, differential rankings, and urgency.</td>
+      <td><code>X-Auth-Token</code></td>
+      <td>Executes 4-frame temporal extraction, visual inspection, and differential assessment.</td>
     </tr>
     <tr>
-      <td><code>GET /api/health-screenings/:id</code></td>
-      <td><code>X-Auth-Token</code></td>
-      <td>Retrieves complete persisted diagnostic report by ID.</td>
+      <td><code>GET /api/outbreaks</code></td>
+      <td><code>?district=...</code></td>
+      <td>Lists active and resolved disease clusters across Maharashtra districts.</td>
+    </tr>
+    <tr>
+      <td><code>POST /api/outbreaks/report-recovery</code></td>
+      <td><code>Content-Type: json</code></td>
+      <td>Reports herd recovery. Automatically decrements affected counts and clears SOS.</td>
+    </tr>
+    <tr>
+      <td><code>POST /api/outbreaks/resolve</code></td>
+      <td><code>X-Auth-Token (Vet)</code></td>
+      <td>Doctor issues official clearance certificate to resolve outbreak.</td>
     </tr>
     <tr>
       <td><code>GET /api/animals</code></td>
-      <td><code>X-Auth-Token</code></td>
-      <td>Lists all registered patients and profiles for the authenticated user.</td>
+      <td><code>?q=...&tag_number=...</code></td>
+      <td>Fetches user's animals or full regional directory with Pashu Aadhaar search (veterinarians).</td>
     </tr>
     <tr>
-      <td><code>POST /api/animals</code></td>
-      <td><code>Content-Type: application/json</code><br><code>X-Auth-Token</code></td>
-      <td>Creates a new patient animal profile.</td>
+      <td><code>GET /api/animals/tag/:tag</code></td>
+      <td>Public / Auth</td>
+      <td>Instant lookup of any livestock or companion animal by 12-digit Pashu Aadhaar ear tag.</td>
     </tr>
     <tr>
-      <td><code>GET /api/reminders</code></td>
+      <td><code>GET /api/clinic-test-results</code></td>
+      <td><code>?animal_id=...</code></td>
+      <td>Confidential retrieval of doctor-issued lab test reports (owner & attending vets only).</td>
+    </tr>
+    <tr>
+      <td><code>POST /api/clinic-test-results</code></td>
+      <td><code>X-Auth-Token (Vet)</code></td>
+      <td>Veterinarian publishes official lab test report (CBC, Mastitis CMT, PCR).</td>
+    </tr>
+    <tr>
+      <td><code>GET /api/inventory</code></td>
+      <td><code>?district=...</code></td>
+      <td>Returns dynamic stock of vaccines, antibiotics, antiseptics, and PPE supplies.</td>
+    </tr>
+    <tr>
+      <td><code>PUT / DELETE /api/inventory</code></td>
       <td><code>X-Auth-Token</code></td>
-      <td>Lists active vaccination, medication, and clinical follow-up reminders.</td>
+      <td>Updates or deletes inventory stock (strictly restricted to the record creator).</td>
+    </tr>
+    <tr>
+      <td><code>GET /api/gov-advisories</code></td>
+      <td><code>?district=...</code></td>
+      <td>Returns official Maharashtra animal husbandry circulars and ring vaccination directives.</td>
     </tr>
   </tbody>
 </table>
 
-<!-- 9. Security, Token Isolation & Reliability -->
-<h2>9. Security Architecture & Reliability Engineering</h2>
+<!-- 7. Verified Clinical Case Studies -->
+<h2>7. Clinical Verification Benchmarks across Livestock & Companion Animals</h2>
 
-<div class="callout warning">
-  <div class="callout-title">🛡️ Security & Zero-Leakage Architecture</div>
-  <ul>
-    <li><strong>Header Isolation:</strong> User session tokens are strictly passed over <code>X-Auth-Token</code> and <code>X-User-ID</code> headers. The server's AI client injects the upstream Hugging Face API key independently via <code>Authorization: Bearer &lt;HUGGINGFACE_API_KEY&gt;</code>, preventing session token leaks and 401 collisions.</li>
-    <li><strong>No Public Admin Endpoints:</strong> All database inspection, health checks (<code>PRAGMA integrity_check</code>), and automated backup triggers are strictly internal to the server process and are never exposed to the public Internet.</li>
-    <li><strong>Bcrypt Password Security:</strong> User passwords in <code>user.db</code> are salted and hashed using adaptive Bcrypt (cost factor 10). Plaintext passwords are never stored in memory or on disk.</li>
-    <li><strong>Atomic Point-in-Time Backups:</strong> The backup engine uses native transactional <code>VACUUM INTO</code> commands, producing zero-downtime, fully verified, uncorrupted backup snapshots in <code>./backups/</code> upon every database mutation.</li>
-  </ul>
-</div>
-
-<!-- 10. Verification & Test Metrics -->
-<h2>10. Verified Clinical Case Studies & Test Benchmarks</h2>
-
-<table>
+<table border="1" cellspacing="0" cellpadding="2.5" bordercolor="#cbd5e1" style="width: 100%; border-collapse: collapse;">
   <thead>
     <tr>
-      <th style="width: 25%;">Test Input & Scenario</th>
-      <th style="width: 25%;">AI Vision Detection</th>
-      <th style="width: 35%;">AI Differential Diagnoses</th>
-      <th style="width: 15%;">Triage Urgency</th>
+      <th style="width: 22%;">Clinical Scenario</th>
+      <th style="width: 25%;">Visual Analysis</th>
+      <th style="width: 38%;">Veterinary Differentials</th>
+      <th style="width: 15%;">Triage & Outbreak</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td><strong>Puppy Playful Video</strong><br><small>WebM video clip barking at kitchen bin</small></td>
-      <td>Alert, playful posture, voluntary movements, no skin/mucosal lesions, no respiratory distress.</td>
-      <td>1. <strong>[HIGH] Normal Puppy Play Behavior</strong><br>2. [POSSIBLE] Behavioral Response to Reflection<br>3. [LOW] Attention-seeking behavior</td>
-      <td><span class="badge badge-green">LOW</span></td>
+      <td><strong>Bovine Farm Cluster</strong><br><small>Baramati Dairy Farm, Cattle</small></td>
+      <td>Excessive ropy salivation, interdigital foot vesicles, oral erosions on tongue.</td>
+      <td>1. <strong>[HIGH] Foot-and-Mouth Disease (FMD / लाळ्या खुरकूत)</strong><br>2. [MODERATE] Vesicular Stomatitis</td>
+      <td><span class="badge badge-red">CRITICAL SOS</span><br><small>Verified Outbreak Active</small></td>
     </tr>
     <tr>
-      <td><strong>Canine Neurological / Motion Video</strong><br><small>Involuntary twitching, crusting, hard pads</small></td>
-      <td>Rhythmic jaw/limb myoclonus, ocular-nasal discharge, paw pad hyperkeratosis.</td>
-      <td>1. <strong>[HIGH] Canine Distemper Virus (CDV)</strong><br>2. [MODERATE] Immune-Mediated Polyneuropathy<br>3. [POSSIBLE] Zinc-Responsive Dermatosis</td>
-      <td><span class="badge badge-amber">HIGH</span></td>
+      <td><strong>Caprine Epidemic</strong><br><small>Sangamner Goat Herd</small></td>
+      <td>Mucopurulent ocular-nasal discharge, necrotic stomatitis, dyspnea.</td>
+      <td>1. <strong>[HIGH] Peste des Petits Ruminants (PPR)</strong><br>2. [MODERATE] Contagious Caprine Pleuropneumonia</td>
+      <td><span class="badge badge-amber">URGENT</span><br><small>Ring Vaccine Deployed</small></td>
     </tr>
     <tr>
-      <td><strong>Adult Dog with Trauma</strong><br><small><code>dog.jpg</code> (No symptoms supplied)</small></td>
-      <td>Lateral recumbency, bandaged right front paw, perineal fluid stain on floor.</td>
-      <td>1. <strong>[HIGH] Traumatic Paw Injury / Post-Op</strong><br>2. [MODERATE] Urinary Tract Infection / Incontinence<br>3. [POSSIBLE] Perineal Hernia / Drainage</td>
-      <td><span class="badge badge-blue">MODERATE</span></td>
+      <td><strong>Canine Motion Clip</strong><br><small>10s video of puppy twitching</small></td>
+      <td>Rhythmic involuntary myoclonus (chewing-gum seizures), nasal hyperkeratosis.</td>
+      <td>1. <strong>[HIGH] Canine Distemper Encephalomyelitis</strong><br>2. [MODERATE] Idiopathic Epilepsy</td>
+      <td><span class="badge badge-red">EMERGENCY</span><br><small>Doctor Consult Sent</small></td>
     </tr>
     <tr>
-      <td><strong>Critical Hemorrhagic Presentation</strong><br><small><code>dog.jpg</code> + 24h bloody diarrhea & vomiting</small></td>
-      <td>Lateral recumbency, severe prostration, continuous hematochezia fluid on floor, bandaged leg.</td>
-      <td>1. <strong>[HIGH] Canine Parvovirus (CPV-2)</strong><br>2. [MODERATE] Acute Hemorrhagic Diarrhea Syndrome (AHDS)<br>3. [POSSIBLE] Intestinal Foreign Body Obstruction</td>
-      <td><span class="badge badge-amber" style="background:#fee2e2; color:#991b1b;">EMERGENCY</span></td>
+      <td><strong>Healed Dairy Herd</strong><br><small>Malegaon Budruk, Day 14 Follow-up</small></td>
+      <td>Complete re-epithelialization of oral lesions, normal gait, feeding resumed.</td>
+      <td>1. <strong>[RESOLVED] Post-FMD Clinical Recovery</strong><br>2. Complete tissue healing confirmed.</td>
+      <td><span class="badge badge-green">RESOLVED</span><br><small>SOS Cleared &bull; Open</small></td>
     </tr>
   </tbody>
 </table>
 
-<div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #e2e8f0; font-size: 8pt; color: #64748b; text-align: center;">
-  VetMyPet - AI Animal Health & Diagnostic Platform &bull; Technical Whitepaper & System Documentation &bull; Built with Go, React, SQLite WAL & Multimodal AI
+<div style="margin-top: 6px; padding-top: 4px; border-top: 1px solid #e2e8f0; font-size: 6.8pt; color: #64748b; text-align: center;">
+  PashuRakshak (पशुरक्षक) &bull; Livestock & Companion Animal Health & Outbreak Surveillance Platform &bull; In Alignment with Maharashtra PS ID 26128 &bull; Go, React 18, Triple SQLite WAL
 </div>
 
 </body>

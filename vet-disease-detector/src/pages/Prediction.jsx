@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { uploadHealthMedia } from '../api/client.js';
 
 export default function Prediction({
+  user = null,
   scannerPresets = [],
   onRunPrediction,
   setActivePage,
@@ -9,6 +10,72 @@ export default function Prediction({
   isAnalyzing = false
 }) {
   const safeScannerPresets = Array.isArray(scannerPresets) ? scannerPresets : [];
+
+  if (user?.role === 'ngo' || user?.role === 'gov') {
+    return (
+      <div className="max-w-2xl mx-auto my-12 bg-white rounded-3xl p-8 sm:p-10 border border-slate-200 shadow-xl text-center space-y-5">
+        <div className="w-16 h-16 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center text-3xl mx-auto shadow-md">
+          🏛️
+        </div>
+        <div className="space-y-2">
+          <span className="bg-teal-100 text-teal-800 text-[10px] font-black uppercase px-3 py-1 rounded-full border border-teal-200">
+            Government & NGO Command Portal
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-900">Directives & Surveillance Center</h2>
+          <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+            As a Government official or NGO representative, consumer AI scanning is omitted from your account. Use your dedicated Dashboard to publish official circulars, ring vaccination mandates, quarantine directives, and monitor statewide outbreak alerts.
+          </p>
+        </div>
+        <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
+          <button
+            onClick={() => setActivePage('dashboard')}
+            className="bg-teal-600 hover:bg-teal-700 text-white font-black text-xs px-6 py-3 rounded-2xl shadow-md transition-colors flex items-center justify-center gap-2"
+          >
+            <span>📢 Go to Directive Publishing Portal</span>
+          </button>
+          <button
+            onClick={() => setActivePage('notifications')}
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-5 py-3 rounded-2xl transition-colors"
+          >
+            🚨 Outbreak Radar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (user?.role === 'vet') {
+    return (
+      <div className="max-w-2xl mx-auto my-12 bg-white rounded-3xl p-8 sm:p-10 border border-slate-200 shadow-xl text-center space-y-5">
+        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-3xl mx-auto shadow-md">
+          🩺
+        </div>
+        <div className="space-y-2">
+          <span className="bg-blue-100 text-blue-800 text-[10px] font-black uppercase px-3 py-1 rounded-full border border-blue-200">
+            Veterinarian Clinical Workflow
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-900">Clinical Case Review Queue</h2>
+          <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+            As a licensed veterinarian, consumer AI scanning is omitted from your account. Your dedicated role is evaluating doubtful scans submitted by farmers and pet parents, confirming diagnoses, and issuing clinical prescriptions.
+          </p>
+        </div>
+        <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
+          <button
+            onClick={() => setActivePage('consultations')}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-6 py-3 rounded-2xl shadow-md transition-colors flex items-center justify-center gap-2"
+          >
+            <span>📋 Go to Doctor Case Review Queue</span>
+          </button>
+          <button
+            onClick={() => setActivePage('notifications')}
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-5 py-3 rounded-2xl transition-colors"
+          >
+            🚨 Outbreak Radar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const [scanImage, setScanImage] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);

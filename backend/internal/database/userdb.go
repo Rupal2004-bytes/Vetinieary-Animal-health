@@ -114,6 +114,34 @@ CREATE INDEX IF NOT EXISTS idx_auth_logs_user_id ON auth_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 `,
 		},
+		{
+			Version: 3,
+			Name:    "add_geo_farm_clinic_fields",
+			Up: `
+ALTER TABLE users ADD COLUMN address TEXT;
+ALTER TABLE users ADD COLUMN city TEXT;
+ALTER TABLE users ADD COLUMN district TEXT;
+ALTER TABLE users ADD COLUMN state TEXT;
+ALTER TABLE users ADD COLUMN pincode TEXT;
+ALTER TABLE users ADD COLUMN farm_name TEXT;
+ALTER TABLE users ADD COLUMN farm_village TEXT;
+ALTER TABLE users ADD COLUMN farm_taluka TEXT;
+ALTER TABLE users ADD COLUMN livestock_types TEXT;
+ALTER TABLE users ADD COLUMN herd_size INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN clinic_address TEXT;
+ALTER TABLE users ADD COLUMN clinic_hours TEXT;
+ALTER TABLE users ADD COLUMN clinic_availability TEXT;
+CREATE INDEX IF NOT EXISTS idx_users_district ON users(district);
+`,
+		},
+		{
+			Version: 4,
+			Name:    "add_vet_visiting_and_unavailability_fields",
+			Up: `
+ALTER TABLE users ADD COLUMN clinic_visiting_location TEXT;
+ALTER TABLE users ADD COLUMN unavailability_notice TEXT;
+`,
+		},
 	}
 
 	return RunMigrations(ctx, db.DB, migrations)
@@ -129,8 +157,8 @@ func (db *UserDB) EnsureDemoUser(ctx context.Context) error {
 	_ = db.QueryRowContext(ctx, `SELECT COUNT(1) FROM users WHERE email = 'demo@animalhealth.ai'`).Scan(&count)
 	if count == 0 {
 		_, err = db.ExecContext(ctx, `
-INSERT INTO users (name, email, role, password_hash, hf_connected, clinic_name)
-VALUES ('Demo Veterinarian', 'demo@animalhealth.ai', 'veterinarian', ?, 1, 'Central Emergency Veterinary Clinic')`, string(hash))
+INSERT INTO users (name, email, role, password_hash, hf_connected, clinic_name, district, city)
+VALUES ('Dr. Sarah Jenkins, DVM', 'demo@animalhealth.ai', 'vet', ?, 1, 'Central Veterinary Polyclinic & Hospital', 'Pune', 'Pune')`, string(hash))
 		return err
 	}
 	return nil
@@ -141,7 +169,7 @@ func (db *UserDB) CreateUser(ctx context.Context, u models.User, password string
 	u.Email = strings.ToLower(strings.TrimSpace(u.Email))
 	u.Role = strings.TrimSpace(u.Role)
 	if u.Role == "" {
-		u.Role = "owner"
+		u.Role = "pet_owner"
 	}
 	if u.Name == "" || u.Email == "" || len(password) < 4 {
 		return models.User{}, errors.New("name, valid email, and password (at least 4 characters) are required")
@@ -161,35 +189,120 @@ func (db *UserDB) CreateUser(ctx context.Context, u models.User, password string
 	}
 
 	res, err := db.ExecContext(ctx, `
-INSERT INTO users (name, email, role, password_hash, phone, clinic_name, avatar_url, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-		u.Name, u.Email, u.Role, string(hash), u.Phone, u.ClinicName, u.AvatarURL)
+INSERT INTO users (
+  name, email, role, password_hash, phone, address, city, district, state, pincode,
+  farm_name, farm_village, farm_taluka, livestock_types, herd_size,
+  clinic_name, clinic_address, clinic_hours, clinic_availability, clinic_visiting_location, unavailability_notice, avatar_url,
+  created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+		u.Name, u.Email, u.Role, string(hash), u.Phone, u.Address, u.City, u.District, u.State, u.Pincode,
+		u.FarmName, u.FarmVillage, u.FarmTaluka, u.LivestockTypes, u.HerdSize,
+		u.ClinicName, u.ClinicAddress, u.ClinicHours, u.ClinicAvailability, u.ClinicVisitingLocation, u.UnavailabilityNotice, u.AvatarURL)
 	if err != nil {
 		return models.User{}, err
 	}
 
 	id, _ := res.LastInsertId()
-	db.logAuthEvent(ctx, id, u.Email, "register", ip, fmt.Sprintf("Account registered with role %s", u.Role))
+	db.logAuthEvent(ctx, id, u.Email, "register", ip, fmt.Sprintf("Account registered with role %s (District: %s)", u.Role, u.District))
 	db.notifyChange()
 
 	return db.GetUserByID(ctx, id)
 }
 
-func (db *UserDB) AuthenticateUser(ctx context.Context, email, password, ip, userAgent string) (models.AuthResponse, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+func scanUserRow(scanner interface{ Scan(dest ...any) error }) (models.User, error) {
 	var u models.User
 	var hfConnected int
-	var phone, clinicName, avatarURL sql.NullString
+	var phone, address, city, district, state, pincode sql.NullString
+	var farmName, farmVillage, farmTaluka, livestockTypes sql.NullString
+	var herdSize sql.NullInt64
+	var clinicName, clinicAddress, clinicHours, clinicAvailability, clinicVisitingLocation, unavailabilityNotice, avatarURL sql.NullString
 	var lastLogin sql.NullTime
 
-	row := db.QueryRowContext(ctx, `
-SELECT id, name, email, role, password_hash, hf_connected, phone, clinic_name, avatar_url, created_at, updated_at, last_login_at
-FROM users WHERE email = ?`, email)
-
-	if err := row.Scan(
+	if err := scanner.Scan(
 		&u.ID, &u.Name, &u.Email, &u.Role, &u.PasswordHash, &hfConnected,
-		&phone, &clinicName, &avatarURL, &u.CreatedAt, &u.UpdatedAt, &lastLogin,
+		&phone, &address, &city, &district, &state, &pincode,
+		&farmName, &farmVillage, &farmTaluka, &livestockTypes, &herdSize,
+		&clinicName, &clinicAddress, &clinicHours, &clinicAvailability, &clinicVisitingLocation, &unavailabilityNotice, &avatarURL,
+		&u.CreatedAt, &u.UpdatedAt, &lastLogin,
 	); err != nil {
+		return models.User{}, err
+	}
+
+	u.HFConnected = hfConnected == 1
+	if phone.Valid {
+		u.Phone = phone.String
+	}
+	if address.Valid {
+		u.Address = address.String
+	}
+	if city.Valid {
+		u.City = city.String
+	}
+	if district.Valid {
+		u.District = district.String
+	}
+	if state.Valid {
+		u.State = state.String
+	}
+	if pincode.Valid {
+		u.Pincode = pincode.String
+	}
+	if farmName.Valid {
+		u.FarmName = farmName.String
+	}
+	if farmVillage.Valid {
+		u.FarmVillage = farmVillage.String
+	}
+	if farmTaluka.Valid {
+		u.FarmTaluka = farmTaluka.String
+	}
+	if livestockTypes.Valid {
+		u.LivestockTypes = livestockTypes.String
+	}
+	if herdSize.Valid {
+		u.HerdSize = int(herdSize.Int64)
+	}
+	if clinicName.Valid {
+		u.ClinicName = clinicName.String
+	}
+	if clinicAddress.Valid {
+		u.ClinicAddress = clinicAddress.String
+	}
+	if clinicHours.Valid {
+		u.ClinicHours = clinicHours.String
+	}
+	if clinicAvailability.Valid {
+		u.ClinicAvailability = clinicAvailability.String
+	}
+	if clinicVisitingLocation.Valid {
+		u.ClinicVisitingLocation = clinicVisitingLocation.String
+	}
+	if unavailabilityNotice.Valid {
+		u.UnavailabilityNotice = unavailabilityNotice.String
+	}
+	if avatarURL.Valid {
+		u.AvatarURL = avatarURL.String
+	}
+	if lastLogin.Valid {
+		t := lastLogin.Time
+		u.LastLoginAt = &t
+	}
+	return u, nil
+}
+
+const userSelectColumns = `
+id, name, email, role, password_hash, hf_connected,
+COALESCE(phone,''), COALESCE(address,''), COALESCE(city,''), COALESCE(district,''), COALESCE(state,''), COALESCE(pincode,''),
+COALESCE(farm_name,''), COALESCE(farm_village,''), COALESCE(farm_taluka,''), COALESCE(livestock_types,''), COALESCE(herd_size,0),
+COALESCE(clinic_name,''), COALESCE(clinic_address,''), COALESCE(clinic_hours,''), COALESCE(clinic_availability,''),
+COALESCE(clinic_visiting_location,''), COALESCE(unavailability_notice,''), COALESCE(avatar_url,''),
+created_at, updated_at, last_login_at`
+
+func (db *UserDB) AuthenticateUser(ctx context.Context, email, password, ip, userAgent string) (models.AuthResponse, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	row := db.QueryRowContext(ctx, `SELECT `+userSelectColumns+` FROM users WHERE email = ?`, email)
+	u, err := scanUserRow(row)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			db.logAuthEvent(ctx, 0, email, "login_failed", ip, "User not found")
 			return models.AuthResponse{}, ErrInvalidCredentials
@@ -200,21 +313,6 @@ FROM users WHERE email = ?`, email)
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
 		db.logAuthEvent(ctx, u.ID, email, "login_failed", ip, "Incorrect password")
 		return models.AuthResponse{}, ErrInvalidCredentials
-	}
-
-	u.HFConnected = hfConnected == 1
-	if phone.Valid {
-		u.Phone = phone.String
-	}
-	if clinicName.Valid {
-		u.ClinicName = clinicName.String
-	}
-	if avatarURL.Valid {
-		u.AvatarURL = avatarURL.String
-	}
-	if lastLogin.Valid {
-		t := lastLogin.Time
-		u.LastLoginAt = &t
 	}
 
 	token, expiresAt, err := db.createSession(ctx, u.ID, ip, userAgent)
@@ -233,41 +331,24 @@ FROM users WHERE email = ?`, email)
 }
 
 func (db *UserDB) GetUserByID(ctx context.Context, id int64) (models.User, error) {
-	var u models.User
-	var hfConnected int
-	var phone, clinicName, avatarURL sql.NullString
-	var lastLogin sql.NullTime
-
-	row := db.QueryRowContext(ctx, `
-SELECT id, name, email, role, password_hash, hf_connected, phone, clinic_name, avatar_url, created_at, updated_at, last_login_at
-FROM users WHERE id = ?`, id)
-
-	if err := row.Scan(
-		&u.ID, &u.Name, &u.Email, &u.Role, &u.PasswordHash, &hfConnected,
-		&phone, &clinicName, &avatarURL, &u.CreatedAt, &u.UpdatedAt, &lastLogin,
-	); err != nil {
+	row := db.QueryRowContext(ctx, `SELECT `+userSelectColumns+` FROM users WHERE id = ?`, id)
+	u, err := scanUserRow(row)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return models.User{}, ErrUserNotFound
 		}
 		return models.User{}, err
 	}
-
-	u.HFConnected = hfConnected == 1
-	if phone.Valid {
-		u.Phone = phone.String
-	}
-	if clinicName.Valid {
-		u.ClinicName = clinicName.String
-	}
-	if avatarURL.Valid {
-		u.AvatarURL = avatarURL.String
-	}
-	if lastLogin.Valid {
-		t := lastLogin.Time
-		u.LastLoginAt = &t
-	}
 	return u, nil
 }
+
+const userSelectColumnsJoined = `
+u.id, u.name, u.email, u.role, u.password_hash, u.hf_connected,
+COALESCE(u.phone,''), COALESCE(u.address,''), COALESCE(u.city,''), COALESCE(u.district,''), COALESCE(u.state,''), COALESCE(u.pincode,''),
+COALESCE(u.farm_name,''), COALESCE(u.farm_village,''), COALESCE(u.farm_taluka,''), COALESCE(u.livestock_types,''), COALESCE(u.herd_size,0),
+COALESCE(u.clinic_name,''), COALESCE(u.clinic_address,''), COALESCE(u.clinic_hours,''), COALESCE(u.clinic_availability,''),
+COALESCE(u.clinic_visiting_location,''), COALESCE(u.unavailability_notice,''), COALESCE(u.avatar_url,''),
+u.created_at, u.updated_at, u.last_login_at`
 
 func (db *UserDB) GetUserByToken(ctx context.Context, token string) (models.User, error) {
 	token = strings.TrimSpace(token)
@@ -275,42 +356,70 @@ func (db *UserDB) GetUserByToken(ctx context.Context, token string) (models.User
 		return models.User{}, ErrSessionExpired
 	}
 
-	var u models.User
-	var hfConnected int
-	var phone, clinicName, avatarURL sql.NullString
-	var lastLogin sql.NullTime
-
 	row := db.QueryRowContext(ctx, `
-SELECT u.id, u.name, u.email, u.role, u.password_hash, u.hf_connected, u.phone, u.clinic_name, u.avatar_url, u.created_at, u.updated_at, u.last_login_at
+SELECT `+userSelectColumnsJoined+`
 FROM sessions s
 JOIN users u ON s.user_id = u.id
 WHERE s.token = ? AND s.expires_at > CURRENT_TIMESTAMP`, token)
 
-	if err := row.Scan(
-		&u.ID, &u.Name, &u.Email, &u.Role, &u.PasswordHash, &hfConnected,
-		&phone, &clinicName, &avatarURL, &u.CreatedAt, &u.UpdatedAt, &lastLogin,
-	); err != nil {
+	u, err := scanUserRow(row)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return models.User{}, ErrSessionExpired
 		}
 		return models.User{}, err
 	}
-
-	u.HFConnected = hfConnected == 1
-	if phone.Valid {
-		u.Phone = phone.String
-	}
-	if clinicName.Valid {
-		u.ClinicName = clinicName.String
-	}
-	if avatarURL.Valid {
-		u.AvatarURL = avatarURL.String
-	}
-	if lastLogin.Valid {
-		t := lastLogin.Time
-		u.LastLoginAt = &t
-	}
 	return u, nil
+}
+
+func (db *UserDB) UpdateProfile(ctx context.Context, u models.User) (models.User, error) {
+	u.Name = strings.TrimSpace(u.Name)
+	if u.Name == "" {
+		return models.User{}, errors.New("name cannot be empty")
+	}
+
+	_, err := db.ExecContext(ctx, `
+UPDATE users
+SET name = ?, role = COALESCE(NULLIF(?, ''), role), phone = ?, address = ?, city = ?, district = ?, state = ?, pincode = ?,
+    farm_name = ?, farm_village = ?, farm_taluka = ?, livestock_types = ?, herd_size = ?,
+    clinic_name = ?, clinic_address = ?, clinic_hours = ?, clinic_availability = ?,
+    clinic_visiting_location = ?, unavailability_notice = ?, avatar_url = ?, updated_at = CURRENT_TIMESTAMP
+WHERE id = ?`,
+		u.Name, u.Role, u.Phone, u.Address, u.City, u.District, u.State, u.Pincode,
+		u.FarmName, u.FarmVillage, u.FarmTaluka, u.LivestockTypes, u.HerdSize,
+		u.ClinicName, u.ClinicAddress, u.ClinicHours, u.ClinicAvailability,
+		u.ClinicVisitingLocation, u.UnavailabilityNotice, u.AvatarURL, u.ID)
+	if err != nil {
+		return models.User{}, err
+	}
+
+	db.notifyChange()
+	return db.GetUserByID(ctx, u.ID)
+}
+
+func (db *UserDB) ListVets(ctx context.Context, district string) ([]models.User, error) {
+	query := `
+SELECT ` + userSelectColumns + `
+FROM users
+WHERE role = 'vet'
+  AND (? = '' OR LOWER(district) = LOWER(?) OR LOWER(district) LIKE '%all%' OR district = '')
+ORDER BY CASE clinic_availability WHEN 'open' THEN 1 WHEN 'visiting' THEN 2 ELSE 3 END, name ASC`
+
+	rows, err := db.QueryContext(ctx, query, district, district)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []models.User
+	for rows.Next() {
+		u, err := scanUserRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, u)
+	}
+	return list, rows.Err()
 }
 
 func (db *UserDB) RevokeSession(ctx context.Context, token string, ip string) error {
@@ -361,24 +470,6 @@ func (db *UserDB) ChangePassword(ctx context.Context, userID int64, oldPassword,
 	db.logAuthEvent(ctx, userID, email, "password_change_success", ip, "Password updated successfully")
 	db.notifyChange()
 	return nil
-}
-
-func (db *UserDB) UpdateProfile(ctx context.Context, userID int64, name, role, phone, clinicName, avatarURL string) (models.User, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return models.User{}, errors.New("name cannot be empty")
-	}
-
-	_, err := db.ExecContext(ctx, `
-UPDATE users
-SET name = ?, role = COALESCE(NULLIF(?, ''), role), phone = ?, clinic_name = ?, avatar_url = ?, updated_at = CURRENT_TIMESTAMP
-WHERE id = ?`, name, role, phone, clinicName, avatarURL, userID)
-	if err != nil {
-		return models.User{}, err
-	}
-
-	db.notifyChange()
-	return db.GetUserByID(ctx, userID)
 }
 
 func (db *UserDB) SetHuggingFaceConnected(ctx context.Context, userID int64, connected bool) (models.User, error) {

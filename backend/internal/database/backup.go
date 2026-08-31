@@ -291,9 +291,9 @@ func CheckDBIntegrity(dbPath string) (models.DatabaseHealth, error) {
 	}, nil
 }
 
-func RunInternalHealthChecks(userDBPath, mainDBPath string) {
+func RunInternalHealthChecks(dbPaths ...string) {
 	log.Printf("==== Internal Database Health & Schema Verification ====")
-	for _, p := range []string{userDBPath, mainDBPath} {
+	for _, p := range dbPaths {
 		if p == "" {
 			continue
 		}

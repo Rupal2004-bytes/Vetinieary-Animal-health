@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 
-export default function History({ historyList = [], onSelectHistoryItem, setActivePage }) {
+export default function History({ user = null, historyList = [], onSelectHistoryItem, setActivePage }) {
+  const isVet = user?.role === 'vet';
   const [filterSpecies, setFilterSpecies] = useState('all');
   const safeHistory = Array.isArray(historyList) ? historyList : [];
 
@@ -18,8 +19,12 @@ export default function History({ historyList = [], onSelectHistoryItem, setActi
           <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full uppercase">
             Clinical Diagnostic Records
           </span>
-          <h1 className="text-2xl font-black text-slate-900 mt-1">Prediction & Triage History</h1>
-          <p className="text-xs text-slate-500">Chronological history of evaluated animal differential cases</p>
+          <h1 className="text-2xl font-black text-slate-900 mt-1">
+            {isVet ? 'Patient Clinical Case Records' : 'Prediction & Triage History'}
+          </h1>
+          <p className="text-xs text-slate-500">
+            {isVet ? 'Chronological records of clinical reviews and differentials' : 'Chronological history of evaluated animal differential cases'}
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -35,12 +40,21 @@ export default function History({ historyList = [], onSelectHistoryItem, setActi
             <option value="horse">Equine (Horses)</option>
           </select>
 
-          <button
-            onClick={() => setActivePage('home')}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors"
-          >
-            + New Scan
-          </button>
+          {isVet ? (
+            <button
+              onClick={() => setActivePage('consultations')}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
+            >
+              <span>📋 Doctor Case Queue</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setActivePage('home')}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors shadow-sm"
+            >
+              + New Scan
+            </button>
+          )}
         </div>
       </div>
 
@@ -48,7 +62,11 @@ export default function History({ historyList = [], onSelectHistoryItem, setActi
         <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-12 text-center text-xs text-slate-400 space-y-3">
           <div className="text-4xl">🕒</div>
           <h3 className="text-sm font-bold text-slate-700">No Past Records Found</h3>
-          <p>Run scans in the AI Scanner tab to store and review triage records.</p>
+          <p>
+            {isVet 
+              ? 'No clinical cases recorded yet. Check your Doctor Review Queue for incoming referrals.'
+              : 'Run scans in the AI Scanner tab to store and review triage records.'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

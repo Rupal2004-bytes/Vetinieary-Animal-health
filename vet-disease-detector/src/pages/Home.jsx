@@ -2,11 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { uploadHealthMedia } from '../api/client.js';
 
 export default function Home({
+  user = null,
   setActivePage,
   onRunPrediction,
   scannerPresets = [],
   isAnalyzing = false,
-  apiError = ''
+  apiError = '',
+  urgentSOS = null,
+  animals = [],
+  selectedPatient = null,
+  setSelectedPatient
 }) {
   const [dragActive, setDragActive] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -100,75 +105,75 @@ export default function Home({
   };
 
   const stopCamera = () => {
-    if (isRecordingVideo) {
-      stopVideoRecording();
-    }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setCameraOpen(false);
+    clearInterval(recordTimerRef.current);
     setIsRecordingVideo(false);
-    setRecordDuration(0);
   };
 
   const captureCameraPhoto = () => {
-    const video = videoRef.current;
-    if (!video) return;
+    if (!videoRef.current) return;
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(async (blob) => {
-      if (!blob) return;
-      const file = new File([blob], `camera-scan-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      stopCamera();
-      await handleFileSelected(file);
-    }, 'image/jpeg', 0.9);
+    canvas.width = videoRef.current.videoWidth || 640;
+    canvas.height = videoRef.current.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], `live_capture_${Date.now()}.jpg`, { type: 'image/jpeg' });
+        handleFileSelected(file);
+      }
+    }, 'image/jpeg', 0.92);
   };
 
   const startVideoRecording = () => {
     if (!streamRef.current) return;
     recordedChunksRef.current = [];
-    setIsRecordingVideo(true);
     setRecordDuration(0);
 
-    const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' :
-      MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : 'video/mp4';
+    const mimeTypes = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4'];
+    let supportedMime = '';
+    for (const m of mimeTypes) {
+      if (MediaRecorder.isTypeSupported(m)) {
+        supportedMime = m;
+        break;
+      }
+    }
 
     try {
-      const recorder = new MediaRecorder(streamRef.current, { mimeType: mime });
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          recordedChunksRef.current.push(e.data);
+      const recorder = new MediaRecorder(streamRef.current, supportedMime ? { mimeType: supportedMime } : undefined);
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
         }
       };
-
-      recorder.onstop = async () => {
-        clearInterval(recordTimerRef.current);
-        const ext = mime.includes('mp4') ? 'mp4' : 'webm';
-        const blob = new Blob(recordedChunksRef.current, { type: mime });
-        const file = new File([blob], `gait-motion-${Date.now()}.${ext}`, { type: mime });
-        stopCamera();
-        await handleFileSelected(file);
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: supportedMime || 'video/webm' });
+        const ext = supportedMime.includes('mp4') ? 'mp4' : 'webm';
+        const file = new File([blob], `gait_video_${Date.now()}.${ext}`, { type: blob.type });
+        handleFileSelected(file);
       };
 
-      recorder.start(250);
+      mediaRecorderRef.current = recorder;
+      recorder.start(500);
+      setIsRecordingVideo(true);
+
+      const startTime = Date.now();
       recordTimerRef.current = setInterval(() => {
-        setRecordDuration((prev) => {
-          if (prev >= 12) {
-            stopVideoRecording();
-            return 12;
-          }
-          return prev + 1;
-        });
-      }, 1000);
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        setRecordDuration(elapsed);
+        if (elapsed >= 12) {
+          stopVideoRecording();
+        }
+      }, 500);
     } catch (err) {
-      console.error('MediaRecorder error:', err);
-      setCameraError('Video recording unsupported on this browser. Please upload a video file instead.');
-      setIsRecordingVideo(false);
+      console.error('Video recording init error:', err);
     }
   };
 
@@ -210,7 +215,8 @@ export default function Home({
         mediaId: effectiveMediaId,
         mediaUrl: selectedImage,
         notes: clinicalNotes,
-        symptoms: clinicalNotes ? [clinicalNotes] : []
+        symptoms: clinicalNotes ? [clinicalNotes] : [],
+        patient: selectedPatient
       });
     } finally {
       clearTimeout(stepTimer);
@@ -218,8 +224,312 @@ export default function Home({
     }
   };
 
+  if (user?.role === 'vet') {
+    return (
+      <div className="space-y-8">
+        {/* Urgent Outbreak SOS Notification Banner */}
+        {urgentSOS && (
+          <div 
+            onClick={() => {
+              if (urgentSOS.outbreak_id) {
+                setActivePage('outbreak-detail', { outbreakId: urgentSOS.outbreak_id });
+              } else {
+                setActivePage('notifications');
+              }
+            }}
+            className="bg-gradient-to-r from-red-600 via-red-700 to-rose-800 text-white p-4 sm:p-5 rounded-2xl shadow-xl border-2 border-red-400/80 cursor-pointer hover:shadow-2xl hover:scale-[1.008] transition-all animate-pulse"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white text-red-600 text-xl font-black flex items-center justify-center shadow-md">
+                  🚨
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      {urgentSOS.severity || 'CRITICAL'} OUTBREAK SOS
+                    </span>
+                    <span className="text-xs text-red-100 font-bold">📍 {urgentSOS.district || 'Regional Alert'}</span>
+                  </div>
+                  <h3 className="text-sm font-black mt-0.5 text-white">{urgentSOS.title}</h3>
+                  <p className="text-xs text-red-100 leading-snug font-medium line-clamp-1">{urgentSOS.message}</p>
+                </div>
+              </div>
+              <div className="hidden sm:flex items-center gap-1.5 bg-white text-red-700 font-black text-xs px-3.5 py-2 rounded-xl shadow-sm whitespace-nowrap">
+                <span>View Outbreak Map & Protocols</span>
+                <span>→</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Vet Welcome Header Banner */}
+        <div className="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-10 text-white shadow-2xl border border-blue-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 bg-blue-500/20 text-blue-300 text-xs font-black uppercase px-3 py-1 rounded-full border border-blue-400/30">
+              <span>🩺 Licensed Veterinarian Command Hub</span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-black text-white">
+              {user.name || 'Doctor Workspace'}
+            </h1>
+            <p className="text-blue-200 text-xs sm:text-sm max-w-2xl leading-relaxed">
+              {user.clinic_name || 'Veterinary Clinical Center'} &bull; District: <strong>{user.district || 'Pune'}</strong>
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2.5">
+            <button
+              onClick={() => setActivePage('consultations')}
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-5 py-3 rounded-2xl shadow-lg transition-all flex items-center gap-2"
+            >
+              <span>📋 Open Case Review Queue</span>
+            </button>
+            <button
+              onClick={() => setActivePage('profile')}
+              className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-4 py-3 rounded-2xl border border-white/20 transition-colors flex items-center gap-2"
+            >
+              <span>⚙️ Duty & Profile</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Vet Action Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          
+          <div 
+            onClick={() => setActivePage('consultations')}
+            className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-500 cursor-pointer transition-all space-y-3"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center text-2xl font-bold">
+              📋
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">Doctor Case Review Queue</h3>
+              <p className="text-xs text-slate-500 mt-1">Review doubtful AI scans from farmers, verify differentials, and issue ℞ prescriptions.</p>
+            </div>
+            <span className="text-xs font-bold text-blue-600 flex items-center gap-1">Open Queue →</span>
+          </div>
+
+          <div 
+            onClick={() => setActivePage('notifications')}
+            className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-red-500 cursor-pointer transition-all space-y-3"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-700 flex items-center justify-center text-2xl font-bold">
+              🚨
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">Outbreak Radar & SOS</h3>
+              <p className="text-xs text-slate-500 mt-1">Monitor multi-village disease clusters, consensus alerts, and biosecurity rings.</p>
+            </div>
+            <span className="text-xs font-bold text-red-600 flex items-center gap-1">View Radar →</span>
+          </div>
+
+          <div 
+            onClick={() => setActivePage('inventory')}
+            className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-500 cursor-pointer transition-all space-y-3"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center text-2xl font-bold">
+              📦
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">Dispensary Stock & Vaccines</h3>
+              <p className="text-xs text-slate-500 mt-1">Track regional supplies of FMD, Lumpy Skin, PPR vaccines and critical antibiotics.</p>
+            </div>
+            <span className="text-xs font-bold text-purple-600 flex items-center gap-1">Check Inventory →</span>
+          </div>
+
+          <div 
+            onClick={() => setActivePage('contact')}
+            className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-500 cursor-pointer transition-all space-y-3"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center text-2xl font-bold">
+              📞
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">1962 Mobile Helpline</h3>
+              <p className="text-xs text-slate-500 mt-1">Direct emergency coordination with Government Mobile Veterinary Clinics.</p>
+            </div>
+            <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">Helpline Info →</span>
+          </div>
+
+        </div>
+
+      </div>
+    );
+  }
+
+  if (user?.role === 'ngo' || user?.role === 'gov') {
+    return (
+      <div className="space-y-8">
+        {/* Urgent Outbreak SOS Notification Banner */}
+        {urgentSOS && (
+          <div 
+            onClick={() => {
+              if (urgentSOS.outbreak_id) {
+                setActivePage('outbreak-detail', { outbreakId: urgentSOS.outbreak_id });
+              } else {
+                setActivePage('notifications');
+              }
+            }}
+            className="bg-gradient-to-r from-red-600 via-red-700 to-rose-800 text-white p-4 sm:p-5 rounded-2xl shadow-xl border-2 border-red-400/80 cursor-pointer hover:shadow-2xl hover:scale-[1.008] transition-all animate-pulse"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white text-red-600 text-xl font-black flex items-center justify-center shadow-md">
+                  🚨
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      {urgentSOS.severity || 'CRITICAL'} OUTBREAK SOS
+                    </span>
+                    <span className="text-xs text-red-100 font-bold">📍 {urgentSOS.district || 'Regional Alert'}</span>
+                  </div>
+                  <h3 className="text-sm font-black mt-0.5 text-white">{urgentSOS.title}</h3>
+                  <p className="text-xs text-red-100 leading-snug font-medium line-clamp-1">{urgentSOS.message}</p>
+                </div>
+              </div>
+              <div className="hidden sm:flex items-center gap-1.5 bg-white text-red-700 font-black text-xs px-3.5 py-2 rounded-xl shadow-sm whitespace-nowrap">
+                <span>View Outbreak Map & Protocols</span>
+                <span>→</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* NGO / Gov Welcome Header Banner */}
+        <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-emerald-950 rounded-3xl p-6 sm:p-10 text-white shadow-2xl border border-teal-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 bg-teal-500/20 text-teal-300 text-xs font-black uppercase px-3 py-1 rounded-full border border-teal-400/30">
+              <span>🏛️ {user.role === 'gov' ? 'Government Animal Husbandry Department' : 'Animal Welfare NGO & Relief Network'}</span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-black text-white">
+              {user.name || 'Crisis Command & Directives'}
+            </h1>
+            <p className="text-teal-200 text-xs sm:text-sm max-w-2xl leading-relaxed">
+              District Jurisdiction: <strong>{user.district || 'Statewide Headquarters (Maharashtra)'}</strong>
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2.5">
+            <button
+              onClick={() => setActivePage('dashboard')}
+              className="bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs px-5 py-3 rounded-2xl shadow-lg transition-all flex items-center gap-2"
+            >
+              <span>📢 Publish Official Directives</span>
+            </button>
+            <button
+              onClick={() => setActivePage('notifications')}
+              className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-4 py-3 rounded-2xl border border-white/20 transition-colors flex items-center gap-2"
+            >
+              <span>🚨 Outbreak Radar</span>
+            </button>
+          </div>
+        </div>
+
+        {/* NGO / Gov Action Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          
+          <div 
+            onClick={() => setActivePage('dashboard')}
+            className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-teal-500 cursor-pointer transition-all space-y-3"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center text-2xl font-bold">
+              📢
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">Directive Publishing Portal</h3>
+              <p className="text-xs text-slate-500 mt-1">Issue quarantine mandates, ring vaccination circulars, and statewide alerts.</p>
+            </div>
+            <span className="text-xs font-bold text-teal-600 flex items-center gap-1">Open Publishing Portal →</span>
+          </div>
+
+          <div 
+            onClick={() => setActivePage('notifications')}
+            className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-red-500 cursor-pointer transition-all space-y-3"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-700 flex items-center justify-center text-2xl font-bold">
+              🚨
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">Epidemic Radar & SOS</h3>
+              <p className="text-xs text-slate-500 mt-1">Track multi-village clusters, active containment rings, and recovery reports.</p>
+            </div>
+            <span className="text-xs font-bold text-red-600 flex items-center gap-1">View Radar →</span>
+          </div>
+
+          <div 
+            onClick={() => setActivePage('inventory')}
+            className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-500 cursor-pointer transition-all space-y-3"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center text-2xl font-bold">
+              📦
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">Emergency Relief Inventory</h3>
+              <p className="text-xs text-slate-500 mt-1">Coordinate stockpiles of vaccines, electrolytes, PPE, and emergency medications.</p>
+            </div>
+            <span className="text-xs font-bold text-purple-600 flex items-center gap-1">Manage Inventory →</span>
+          </div>
+
+          <div 
+            onClick={() => setActivePage('emergency')}
+            className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-500 cursor-pointer transition-all space-y-3"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center text-2xl font-bold">
+              📞
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">1962 Helpline Fleet</h3>
+              <p className="text-xs text-slate-500 mt-1">Direct coordination with Government Mobile Veterinary Ambulance units.</p>
+            </div>
+            <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">Helpline Info →</span>
+          </div>
+
+        </div>
+
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
+      
+      {/* Urgent Outbreak SOS Notification Banner */}
+      {urgentSOS && (
+        <div 
+          onClick={() => {
+            if (urgentSOS.outbreak_id) {
+              setActivePage('outbreak-detail', { outbreakId: urgentSOS.outbreak_id });
+            } else {
+              setActivePage('notifications');
+            }
+          }}
+          className="bg-gradient-to-r from-red-600 via-red-700 to-rose-800 text-white p-4 sm:p-5 rounded-2xl shadow-xl border-2 border-red-400/80 cursor-pointer hover:shadow-2xl hover:scale-[1.008] transition-all animate-pulse"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white text-red-600 text-xl font-black flex items-center justify-center shadow-md">
+                🚨
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    {urgentSOS.severity || 'CRITICAL'} OUTBREAK SOS
+                  </span>
+                  <span className="text-xs text-red-100 font-bold">📍 {urgentSOS.district || 'Regional Alert'}</span>
+                </div>
+                <h3 className="text-sm font-black mt-0.5 text-white">{urgentSOS.title}</h3>
+                <p className="text-xs text-red-100 leading-snug font-medium line-clamp-1">{urgentSOS.message}</p>
+              </div>
+            </div>
+            <div className="hidden sm:flex items-center gap-1.5 bg-white text-red-700 font-black text-xs px-3.5 py-2 rounded-xl shadow-sm whitespace-nowrap">
+              <span>View Outbreak Map & Protocols</span>
+              <span>→</span>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Top Main Hero & Instant AI Scanner */}
       <section className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 rounded-3xl p-6 sm:p-10 text-white shadow-2xl border border-slate-800 relative overflow-hidden">
@@ -241,6 +551,53 @@ export default function Home({
 
           {/* Interactive Upload & Camera Dropzone */}
           <div className="bg-slate-800/80 backdrop-blur-md rounded-3xl p-5 sm:p-7 border border-slate-700/80 shadow-xl space-y-5">
+            
+            {/* Patient Animal Profile Context Selector */}
+            {animals.length > 0 && (
+              <div className="bg-slate-900/80 border border-slate-700/80 p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl p-1.5 bg-slate-800 rounded-xl">🐾</span>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Assigning Scan To:</span>
+                    <strong className="text-emerald-400 text-xs">
+                      {selectedPatient
+                        ? `${selectedPatient.name} (${selectedPatient.species} • ${selectedPatient.breed || 'Mixed'} • Tag: ${selectedPatient.tag_number || selectedPatient.id})`
+                        : 'General / Unregistered Animal (Click to select profile)'}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 items-center self-start sm:self-auto">
+                  {selectedPatient && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPatient?.(null)}
+                      className="text-[11px] font-bold text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 transition-colors"
+                    >
+                      ✕ Unselect
+                    </button>
+                  )}
+                  <select
+                    value={selectedPatient?.id || ''}
+                    onChange={(e) => {
+                      const p = animals.find(a => String(a.id) === e.target.value);
+                      setSelectedPatient?.(p || null);
+                      if (p?.notes && !clinicalNotes) {
+                        setClinicalNotes(`Known profile context: ${p.notes}`);
+                      }
+                    }}
+                    className="bg-slate-800 border border-slate-600 text-slate-100 rounded-xl px-3 py-1.5 font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none text-xs"
+                  >
+                    <option value="">-- Choose Registered Animal --</option>
+                    {animals.map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({a.species} • {a.breed || 'Mixed'} • Tag: {a.tag_number || a.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
             
             {cameraOpen ? (
               <div className="relative rounded-2xl overflow-hidden bg-black aspect-video max-h-[380px] mx-auto flex items-center justify-center border-2 border-emerald-500 shadow-2xl">

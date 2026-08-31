@@ -63,12 +63,7 @@ export async function loginAccount(payload) {
 export async function signupAccount(payload) {
   const res = await request('/api/auth/signup', { 
     method: 'POST', 
-    body: JSON.stringify({
-      name: payload.name || payload.fullName,
-      email: payload.email,
-      password: payload.password,
-      role: payload.role || 'owner'
-    }) 
+    body: JSON.stringify(payload) 
   });
   return setStoredAuth(res);
 }
@@ -115,18 +110,65 @@ export async function getAuthLogs() {
   }
 }
 
+export async function getVets(district = '') {
+  try {
+    const params = new URLSearchParams();
+    if (district) params.append('district', district);
+    const res = await request(`/api/vets?${params.toString()}`);
+    return Array.isArray(res) ? res : [];
+  } catch {
+    return [];
+  }
+}
+
 // Animals & Patients
 export async function createAnimal(animal) {
   return request('/api/animals', { method: 'POST', body: JSON.stringify(animal) });
 }
 
-export async function getAnimals() {
-  const res = await request('/api/animals');
+export async function updateAnimal(animal) {
+  return request(`/api/animals/${animal.id}`, { method: 'PUT', body: JSON.stringify(animal) });
+}
+
+export async function deleteAnimal(id) {
+  return request(`/api/animals/${id}`, { method: 'DELETE' });
+}
+
+export async function getAnimals(params = {}) {
+  let url = '/api/animals';
+  const qParams = new URLSearchParams();
+  if (params.q) qParams.append('q', params.q);
+  if (params.tag_number) qParams.append('tag_number', params.tag_number);
+  const qStr = qParams.toString();
+  if (qStr) url += `?${qStr}`;
+  const res = await request(url);
   return Array.isArray(res) ? res : [];
+}
+
+export async function getAnimalByTag(tagNumber) {
+  return request(`/api/animals/tag/${encodeURIComponent(tagNumber)}`);
 }
 
 export async function getAnimal(id) {
   return request(`/api/animals/${id}`);
+}
+
+// Clinic Diagnostic & Laboratory Test Results (Private & Vet Issued)
+export async function getClinicTestResults(animalId = 0) {
+  try {
+    const url = animalId ? `/api/clinic-test-results?animal_id=${animalId}` : '/api/clinic-test-results';
+    const res = await request(url);
+    return Array.isArray(res) ? res : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function publishClinicTestResult(testData) {
+  return request('/api/clinic-test-results', {
+    method: 'POST',
+    body: JSON.stringify(testData)
+  });
 }
 
 // Health Screening & Media
@@ -176,6 +218,110 @@ export async function getNearbyClinics(urgency = 'moderate') {
   } catch {
     return [];
   }
+}
+
+// Outbreak Surveillance & SOS Notifications
+export async function getOutbreaks(district = '', species = '') {
+  try {
+    const params = new URLSearchParams();
+    if (district) params.append('district', district);
+    if (species) params.append('species', species);
+    const res = await request(`/api/outbreaks?${params.toString()}`);
+    return Array.isArray(res) ? res : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getOutbreak(id) {
+  return request(`/api/outbreaks/${id}`);
+}
+
+export async function reportOutbreak(outbreak) {
+  return request('/api/outbreaks', { method: 'POST', body: JSON.stringify(outbreak) });
+}
+
+export async function reportOutbreakRecovery(payload) {
+  return request('/api/outbreaks/report-recovery', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function resolveOutbreak(payload) {
+  return request('/api/outbreaks/resolve', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function getNotifications() {
+  try {
+    const res = await request('/api/notifications');
+    return Array.isArray(res) ? res : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function markNotificationRead(id) {
+  return request('/api/notifications/read', { method: 'POST', body: JSON.stringify({ id }) });
+}
+
+export async function markAllNotificationsRead() {
+  return request('/api/notifications/read-all', { method: 'POST', body: JSON.stringify({}) });
+}
+
+// Vet Case Consultations & Second Opinions
+export async function getVetConsultations(status = '') {
+  try {
+    const res = await request(`/api/vet-consultations?status=${encodeURIComponent(status)}`);
+    return Array.isArray(res) ? res : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function requestVetConsultation(payload) {
+  return request('/api/vet-consultations', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function reviewVetConsultation(payload) {
+  return request('/api/vet-consultations/review', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+// Medical & Vaccine Inventory Tracking
+export async function getInventory(district = '', orgType = '', myInventory = false) {
+  try {
+    const params = new URLSearchParams();
+    if (district) params.append('district', district);
+    if (orgType) params.append('org_type', orgType);
+    if (myInventory) params.append('my_inventory', 'true');
+    const res = await request(`/api/inventory?${params.toString()}`);
+    return Array.isArray(res) ? res : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertInventory(item) {
+  return request('/api/inventory', { method: 'POST', body: JSON.stringify(item) });
+}
+
+export async function updateInventory(item) {
+  return request('/api/inventory', { method: 'PUT', body: JSON.stringify(item) });
+}
+
+export async function deleteInventory(id) {
+  return request(`/api/inventory?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// Government & NGO Advisories
+export async function getGovAdvisories(district = '') {
+  try {
+    const res = await request(`/api/gov-advisories?district=${encodeURIComponent(district)}`);
+    return Array.isArray(res) ? res : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function publishGovAdvisory(advisory) {
+  return request('/api/gov-advisories', { method: 'POST', body: JSON.stringify(advisory) });
 }
 
 export function mediaURL(path) {

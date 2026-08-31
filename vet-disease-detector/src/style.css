@@ -81,23 +81,11 @@ body {
 
 /* Print Styles */
 @media print {
-  body * {
-    visibility: hidden;
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
   }
-  #printableReportArea, #printableReportArea * {
-    visibility: visible;
-  }
-  #printableReportArea {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 20px;
-    background: white;
-    color: black;
-  }
-  .no-print {
+  .no-print, header, footer, nav, button {
     display: none !important;
   }
 }

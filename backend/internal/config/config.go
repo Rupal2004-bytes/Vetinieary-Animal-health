@@ -7,17 +7,18 @@ import (
 )
 
 type Config struct {
-	Port             string
-	DatabasePath     string
-	UserDatabasePath string
-	BackupDir        string
-	MediaStoragePath string
-	FrontendOrigin        string
-	DemoMode              bool
-	HuggingFaceToken      string
-	VisionModel           string
-	VeterinaryModel       string
-	VeterinaryEndpointURL string
+	Port                     string
+	DatabasePath             string
+	UserDatabasePath         string
+	SurveillanceDatabasePath string
+	BackupDir                string
+	MediaStoragePath         string
+	FrontendOrigin           string
+	DemoMode                 bool
+	HuggingFaceToken         string
+	VisionModel              string
+	VeterinaryModel          string
+	VeterinaryEndpointURL    string
 }
 
 func Load() Config {
@@ -43,17 +44,18 @@ func Load() Config {
 	}
 
 	return Config{
-		Port:                  getenv("PORT", "8080"),
-		DatabasePath:          getenv("DATABASE_PATH", "./animal_health.db"),
-		UserDatabasePath:      getenv("USER_DATABASE_PATH", "./user.db"),
-		BackupDir:             getenv("BACKUP_DIR", "./backups"),
-		MediaStoragePath:      getenv("MEDIA_STORAGE_PATH", "./uploads"),
-		FrontendOrigin:        getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
-		DemoMode:              demoMode,
-		HuggingFaceToken:      hfToken,
-		VisionModel:           getenv("VISION_MODEL", "Qwen/Qwen2.5-VL-72B-Instruct"),
-		VeterinaryModel:       getenv("VETERINARY_MODEL", "viggovet/viggoVet-Reasoning-20B"),
-		VeterinaryEndpointURL: getenv("VETERINARY_ENDPOINT_URL", ""),
+		Port:                     getenv("PORT", "8080"),
+		DatabasePath:             getenv("DATABASE_PATH", "./animal_health.db"),
+		UserDatabasePath:         getenv("USER_DATABASE_PATH", "./user.db"),
+		SurveillanceDatabasePath: getenv("SURVEILLANCE_DATABASE_PATH", "./surveillance.db"),
+		BackupDir:                getenv("BACKUP_DIR", "./backups"),
+		MediaStoragePath:         getenv("MEDIA_STORAGE_PATH", "./uploads"),
+		FrontendOrigin:           getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
+		DemoMode:                 demoMode,
+		HuggingFaceToken:         hfToken,
+		VisionModel:              getenv("VISION_MODEL", "Qwen/Qwen2.5-VL-72B-Instruct"),
+		VeterinaryModel:          getenv("VETERINARY_MODEL", "viggovet/viggoVet-Reasoning-20B"),
+		VeterinaryEndpointURL:    getenv("VETERINARY_ENDPOINT_URL", ""),
 	}
 }
 
